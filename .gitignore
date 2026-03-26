@@ -6,5 +6,5 @@ release/
 .DS_Store
 *.sqlite
 *.db
-profiles/
-screenshots/
+./profiles/
+./screenshots/
