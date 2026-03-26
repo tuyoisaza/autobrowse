@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { initDb } from './db/index.js';
-import { getOrCreateDefaultAgent, getConfig as dbGetConfig } from './db/queries.js';
+import { getOrCreateDefaultAgent, getConfig as dbGetConfig, setAIConfig } from './db/queries.js';
 import { logger } from './logger/index.js';
 import { createTask, getTask, getTasks, updateTaskStatus, getOrCreateDefaultAgent as getAgent } from './db/queries.js';
 import { addTaskToQueue, getQueueSize } from './queue/queue.js';
@@ -36,11 +36,29 @@ function getAppConfig() {
   return config;
 }
 
+function ensureAIConfig() {
+  const defaults = [
+    ['enabled', 'true'],
+    ['provider', 'hybrid'],
+    ['local.url', 'http://localhost:11434'],
+    ['local.model', 'llama3.2'],
+    ['cloud.model', 'gpt-4o-mini'],
+    ['fallback', 'true'],
+  ];
+  for (const [key, val] of defaults) {
+    const existing = dbGetConfig(`ai.${key}`);
+    if (!existing) setAIConfig(key, val);
+  }
+}
+
 async function main() {
   logger.info('[AutoBrowse] Starting runtime...');
   
   await initDb();
   logger.info('[DB] Initialized');
+  
+  ensureAIConfig();
+  logger.info('[AI Config] Initialized');
   
   const agent = getOrCreateDefaultAgent();
   logger.info('[Agent] Ready', { agent: agent.name });

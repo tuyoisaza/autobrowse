@@ -247,3 +247,43 @@ export function setConfig(key: string, value: string) {
   }
   saveDb();
 }
+export interface AIConfig {
+  enabled: boolean;
+  provider: 'local' | 'cloud' | 'hybrid';
+  local: { url: string; model: string };
+  cloud: { apiKey: string; model: string };
+  fallback: boolean;
+}
+
+export function getAIConfig(): AIConfig {
+  const db = getDb();
+  const result = db.exec("SELECT key, value FROM config WHERE key LIKE 'ai.%'");
+  const config: any = { 
+    enabled: true, 
+    provider: 'hybrid', 
+    fallback: true,
+    local: { url: 'http://localhost:11434', model: 'llama3.2' },
+    cloud: { apiKey: '', model: 'gpt-4o-mini' }
+  };
+  
+  for (const row of result) {
+    const key = row.values[0][0] as string;
+    const value = row.values[0][1] as string;
+    
+    if (key === 'ai.enabled') config.enabled = value === 'true';
+    if (key === 'ai.provider') config.provider = value;
+    if (key === 'ai.local.url') config.local.url = value;
+    if (key === 'ai.local.model') config.local.model = value;
+    if (key === 'ai.cloud.apiKey') config.cloud.apiKey = value;
+    if (key === 'ai.cloud.model') config.cloud.model = value;
+    if (key === 'ai.fallback') config.fallback = value === 'true';
+  }
+  
+  return config as AIConfig;
+}
+
+export function setAIConfig(key: string, value: string) {
+  const db = getDb();
+  db.run(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`, [`ai.${key}`, value]);
+  saveDb();
+}
