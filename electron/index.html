@@ -1,246 +1,152 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoBrowse - Local Browser Agent</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1a1a2e;
-      color: #eee;
-      min-height: 100vh;
-    }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 20px 0;
-      border-bottom: 1px solid #333;
-      margin-bottom: 20px;
-    }
-    h1 {
-      font-size: 24px;
-      color: #4ade80;
-    }
-    .status-badge {
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 14px;
-      font-weight: 500;
-    }
-    .status-running {
-      background: #22c55e;
-      color: white;
-    }
-    .status-stopped {
-      background: #ef4444;
-      color: white;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-    }
-    .card {
-      background: #16213e;
-      border-radius: 12px;
-      padding: 20px;
-    }
-    .card h2 {
-      font-size: 16px;
-      margin-bottom: 15px;
-      color: #aaa;
-    }
-    .api-endpoint {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .api-endpoint input {
-      flex: 1;
-      padding: 10px;
-      background: #0f172a;
-      border: 1px solid #333;
-      border-radius: 6px;
-      color: #fff;
-      font-family: monospace;
-    }
-    .api-endpoint button {
-      padding: 10px 20px;
-      background: #4ade80;
-      color: #1a1a2e;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 500;
-    }
-    .api-endpoint button:hover {
-      background: #22c55e;
-    }
-    .logs {
-      height: 300px;
-      background: #0f172a;
-      border-radius: 8px;
-      padding: 15px;
-      overflow-y: auto;
-      font-family: 'Consolas', 'Monaco', monospace;
-      font-size: 12px;
-      line-height: 1.6;
-    }
-    .log-entry {
-      padding: 4px 0;
-      border-bottom: 1px solid #1e293b;
-    }
-    .log-time {
-      color: #64748b;
-    }
-    .log-info { color: #4ade80; }
-    .log-warn { color: #fbbf24; }
-    .log-error { color: #ef4444; }
-    .tasks-list {
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    .task-item {
-      padding: 10px;
-      background: #0f172a;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .task-status {
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-    .task-pending { background: #fbbf24; color: #000; }
-    .task-running { background: #3b82f6; color: #fff; }
-    .task-completed { background: #22c55e; color: #fff; }
-    .task-failed { background: #ef4444; color: #fff; }
-    .task-cancelled { background: #6b7280; color: #fff; }
-  </style>
+  <title>AutoBrowse</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="container">
-    <header>
-      <h1>🤖 AutoBrowse</h1>
-      <span id="status" class="status-badge status-running">Running</span>
-    </header>
-    
-    <div class="grid">
-      <div class="card">
-        <h2>API Control</h2>
-        <div class="api-endpoint">
-          <input type="text" id="instruction" placeholder="Enter instruction (e.g., open https://example.com)">
-          <button onclick="createTask()">Send</button>
-        </div>
-        <div class="api-endpoint">
-          <input type="text" id="apiUrl" value="http://127.0.0.1:3847">
-          <button onclick="testApi()">Test API</button>
-        </div>
-      </div>
-      
-      <div class="card">
-        <h2>Tasks</h2>
-        <div class="tasks-list" id="tasksList">
-          <p style="color: #666;">No tasks yet</p>
-        </div>
+    <div class="header">
+      <h1>AutoBrowse</h1>
+      <div>
+        <button class="btn" onclick="showNewTaskModal()">+ New Task</button>
+        <button class="btn btn-secondary" onclick="startRecording()">● Record</button>
       </div>
     </div>
-    
-    <div class="card" style="margin-top: 20px;">
-      <h2>Runtime Logs</h2>
-      <div class="logs" id="logs">
-        <div class="log-entry"><span class="log-time">[--:--:--]</span> <span class="log-info">AutoBrowse initialized</span></div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="value" id="totalTasks">-</div>
+        <div class="label">Total Tasks</div>
       </div>
+      <div class="stat-card">
+        <div class="value" id="completedTasks">-</div>
+        <div class="label">Completed</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="activeTasks">-</div>
+        <div class="label">Running</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="recordingsCount">-</div>
+        <div class="label">Recordings</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('tasks')">Tasks</div>
+      <div class="tab" onclick="switchTab('recordings')">Recordings</div>
+      <div class="tab" onclick="switchTab('profiles')">Profiles</div>
+      <div class="tab" onclick="switchTab('settings')">Settings</div>
+    </div>
+
+    <div id="tasksSection" class="section">
+      <h2>Recent Tasks</h2>
+      <ul class="list" id="tasksList"><li class="loading">Loading...</li></ul>
+    </div>
+
+    <div id="recordingsSection" class="section" style="display:none">
+      <h2>Recordings</h2>
+      <ul class="list" id="recordingsList"><li class="loading">Loading...</li></ul>
+    </div>
+
+    <div id="profilesSection" class="section" style="display:none">
+      <h2>Browser Profiles</h2>
+      <ul class="list" id="profilesList"><li class="loading">Loading...</li></ul>
+    </div>
+
+    <div id="settingsSection" class="section" style="display:none">
+      <h2>Settings</h2>
+      <p>AI Configuration, Browser Settings, etc.</p>
     </div>
   </div>
 
   <script>
-    const API_BASE = 'http://127.0.0.1:3847';
-    
-    function addLog(message, level = 'info') {
-      const logs = document.getElementById('logs');
-      const time = new Date().toISOString().split('T')[1].split('.')[0];
-      const entry = document.createElement('div');
-      entry.className = `log-entry log-${level}`;
-      entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
-      logs.appendChild(entry);
-      logs.scrollTop = logs.scrollHeight;
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('tasksSection').style.display = tab === 'tasks' ? 'block' : 'none';
+      document.getElementById('recordingsSection').style.display = tab === 'recordings' ? 'block' : 'none';
+      document.getElementById('profilesSection').style.display = tab === 'profiles' ? 'block' : 'none';
+      document.getElementById('settingsSection').style.display = tab === 'settings' ? 'block' : 'none';
     }
-    
-    async function createTask() {
-      const instruction = document.getElementById('instruction').value;
-      if (!instruction) return;
-      
+
+    async function loadData() {
       try {
-        const response = await fetch(`${API_BASE}/tasks`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instruction, priority: 1 })
-        });
-        const task = await response.json();
-        addLog(`Task created: ${task.id.substring(0,8)}... - "${instruction}"`, 'info');
-        document.getElementById('instruction').value = '';
-        loadTasks();
-      } catch (err) {
-        addLog(`Error creating task: ${err.message}`, 'error');
+        const tasksRes = await fetch('http://127.0.0.1:5847/tasks?limit=10');
+        const tasks = await tasksRes.json();
+        const recordingsRes = await fetch('http://127.0.0.1:5847/recordings');
+        const recordings = await recordingsRes.json();
+        const profilesRes = await fetch('http://127.0.0.1:5847/profiles');
+        const profiles = await profilesRes.json();
+
+        document.getElementById('totalTasks').textContent = tasks.length;
+        document.getElementById('completedTasks').textContent = tasks.filter(t => t.status === 'completed').length;
+        document.getElementById('activeTasks').textContent = tasks.filter(t => t.status === 'running').length;
+        document.getElementById('recordingsCount').textContent = recordings.recordings?.length || 0;
+
+        document.getElementById('tasksList').innerHTML = tasks.length ? '' : '<li class="list-item">No tasks yet</li>';
+        tasks.forEach(task => addTaskToList(task));
+
+        document.getElementById('recordingsList').innerHTML = recordings.recordings?.length ? '' : '<li class="list-item">No recordings yet</li>';
+        recordings.recordings?.forEach(rec => addRecordingToList(rec));
+
+        document.getElementById('profilesList').innerHTML = profiles.profiles?.length ? '' : '<li class="list-item">No profiles yet</li>';
+        profiles.profiles?.forEach(prof => addProfileToList(prof));
+      } catch (err) { console.error('Failed to load data:', err); }
+    }
+
+    function addTaskToList(task) {
+      const li = document.createElement('li');
+      li.className = 'list-item';
+      li.innerHTML = `<div><strong>${task.instruction.substring(0, 50)}${task.instruction.length > 50 ? '...' : ''}</strong><br><small>${new Date(task.created_at).toLocaleString()}</small></div><span class="status-badge status-${task.status}">${task.status}</span>`;
+      document.getElementById('tasksList').appendChild(li);
+    }
+
+    function addRecordingToList(rec) {
+      const li = document.createElement('li');
+      li.className = 'list-item';
+      li.innerHTML = `<div><strong>${rec.name}</strong><br><small>${rec.duration}ms • ${new Date(rec.created_at).toLocaleString()}</small></div><div><button class="btn" onclick="playRecording('${rec.id}')">▶ Play</button><button class="btn btn-danger" onclick="deleteRecording('${rec.id}')">×</button></div>`;
+      document.getElementById('recordingsList').appendChild(li);
+    }
+
+    function addProfileToList(prof) {
+      const li = document.createElement('li');
+      li.className = 'list-item';
+      li.innerHTML = `<div><strong>${prof.name}</strong><br><small>${new Date(prof.created_at).toLocaleString()}</small></div><button class="btn btn-danger" onclick="deleteProfile('${prof.id}')">×</button>`;
+      document.getElementById('profilesList').appendChild(li);
+    }
+
+    function startRecording() {
+      const name = prompt('Recording name:');
+      if (name) {
+        fetch('http://127.0.0.1:5847/recordings', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name }) }).then(() => alert('Recording started!'));
       }
     }
-    
-    async function loadTasks() {
-      try {
-        const response = await fetch(`${API_BASE}/tasks`);
-        const tasks = await response.json();
-        const list = document.getElementById('tasksList');
-        
-        if (tasks.length === 0) {
-          list.innerHTML = '<p style="color: #666;">No tasks yet</p>';
-          return;
-        }
-        
-        list.innerHTML = tasks.map(task => `
-          <div class="task-item">
-            <span>${task.instruction.substring(0, 40)}${task.instruction.length > 40 ? '...' : ''}</span>
-            <span class="task-status task-${task.status}">${task.status}</span>
-          </div>
-        `).join('');
-      } catch (err) {
-        console.error('Failed to load tasks:', err);
+
+    function playRecording(id) {
+      fetch(`http://127.0.0.1:5847/recordings/${id}/play`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ speed: 1 }) });
+    }
+
+    function deleteRecording(id) {
+      if (confirm('Delete recording?')) { fetch(`http://127.0.0.1:5847/recordings/${id}`, { method: 'DELETE' }).then(loadData); }
+    }
+
+    function deleteProfile(id) {
+      if (confirm('Delete profile?')) { fetch(`http://127.0.0.1:5847/profiles/${id}`, { method: 'DELETE' }).then(loadData); }
+    }
+
+    function showNewTaskModal() {
+      const instruction = prompt('Enter instruction:');
+      if (instruction) {
+        fetch('http://127.0.0.1:5847/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ instruction }) }).then(() => loadData());
       }
     }
-    
-    async function testApi() {
-      try {
-        const response = await fetch(`${API_BASE}/health`);
-        const data = await response.json();
-        addLog(`API Health: ${data.status}`, 'info');
-      } catch (err) {
-        addLog(`API Error: ${err.message}`, 'error');
-      }
-    }
-    
-    if (window.electronAPI) {
-      window.electronAPI.onRuntimeLog((log) => {
-        addLog(log, 'info');
-      });
-    }
-    
-    loadTasks();
-    setInterval(loadTasks, 5000);
+
+    loadData();
+    setInterval(loadData, 5000);
   </script>
 </body>
 </html>
