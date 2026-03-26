@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import { initDb } from './db/index.js';
 import { getOrCreateDefaultAgent, getConfig as dbGetConfig, setAIConfig } from './db/queries.js';
 import { logger } from './logger/index.js';
-import { createTask, getTask, getTasks, updateTaskStatus, getOrCreateDefaultAgent as getAgent } from './db/queries.js';
+import { createTask, getTask, getTasks, updateTaskStatus, getOrCreateDefaultAgent as getAgent, getRecordings, getRecording, deleteRecording, getProfiles, getProfile, deleteProfile } from './db/queries.js';
 import { addTaskToQueue, getQueueSize } from './queue/queue.js';
 import { processTask } from './worker/processor.js';
 import { aiGateway } from './ai/gateway.js';
