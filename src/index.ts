@@ -163,6 +163,80 @@ async function main() {
     return { available };
   });
   
+  server.get('/recordings', async () => ({ recordings: getRecordings() }));
+
+  server.get('/recordings/:id', async (request: any) => {
+    const recording = getRecording(request.params.id);
+    if (!recording) return { error: 'Recording not found' };
+    return recording;
+  });
+
+  server.post('/recordings', async (request: any) => {
+    const { name, description } = request.body || {};
+    if (!name) return { error: 'name is required' };
+    recorder.startRecording();
+    return { success: true, message: 'Recording started. Use /recordings/:id/stop to finish.' };
+  });
+
+  server.post('/recordings/:id/stop', async (request: any) => {
+    const { name, description } = request.body || {};
+    try {
+      const recording = recorder.stopRecording(name || 'Untitled', description);
+      return recording;
+    } catch (err) {
+      return { error: String(err) };
+    }
+  });
+
+  server.post('/recordings/:id/cancel', async () => {
+    recorder.cancelRecording();
+    return { success: true };
+  });
+
+  server.post('/recordings/:id/play', async (request: any) => {
+    const { speed } = request.body || {};
+    try {
+      await replayer.playFromStart(request.params.id, speed);
+      return { success: true };
+    } catch (err) {
+      return { error: String(err) };
+    }
+  });
+
+  server.delete('/recordings/:id', async (request: any) => {
+    deleteRecording(request.params.id);
+    return { success: true };
+  });
+
+  server.get('/profiles', async () => ({ profiles: getProfiles() }));
+
+  server.get('/profiles/:id', async (request: any) => {
+    const profile = getProfile(request.params.id);
+    if (!profile) return { error: 'Profile not found' };
+    return profile;
+  });
+
+  server.post('/profiles', async (request: any) => {
+    const { name } = request.body || {};
+    if (!name) return { error: 'name is required' };
+    const profile = await createProfileFromCurrent(name);
+    return profile;
+  });
+
+  server.post('/profiles/:id/load', async (request: any) => {
+    try {
+      await loadProfile(request.params.id);
+      return { success: true };
+    } catch (err) {
+      return { error: String(err) };
+    }
+  });
+
+  server.delete('/profiles/:id', async (request: any) => {
+    deleteProfile(request.params.id);
+    return { success: true };
+  });
+  
   try {
     await server.listen({ port: cfg.port, host: '127.0.0.1' });
     logger.info('[AutoBrowse] Runtime ready', { port: cfg.port });
