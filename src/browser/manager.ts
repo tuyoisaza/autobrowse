@@ -105,3 +105,47 @@ class BrowserManager {
 }
 
 export const browserManager = new BrowserManager();
+export async function exportBrowserState(page: Page): Promise<{
+  cookies: any[];
+  localStorage: Record<string, string>;
+  sessionStorage: Record<string, string>;
+}> {
+  const cookies = await page.context().cookies();
+  const localStorage = await page.evaluate(() => {
+    const result: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) result[key] = localStorage.getItem(key) || '';
+    }
+    return result;
+  });
+  const sessionStorage = await page.evaluate(() => {
+    const result: Record<string, string> = {};
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key) result[key] = sessionStorage.getItem(key) || '';
+    }
+    return result;
+  });
+  return { cookies, localStorage, sessionStorage };
+}
+
+export async function importBrowserState(page: Page, state: {
+  cookies?: any[];
+  localStorage?: Record<string, string>;
+  sessionStorage?: Record<string, string>;
+}) {
+  if (state.cookies?.length) {
+    await page.context().addCookies(state.cookies);
+  }
+  if (state.localStorage) {
+    await page.evaluate((ls) => {
+      Object.entries(ls).forEach(([k, v]) => localStorage.setItem(k, v));
+    }, state.localStorage);
+  }
+  if (state.sessionStorage) {
+    await page.evaluate((ss) => {
+      Object.entries(ss).forEach(([k, v]) => sessionStorage.setItem(k, v));
+    }, state.sessionStorage);
+  }
+}
