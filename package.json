@@ -1,0 +1,34 @@
+{
+  "name": "autobrowse",
+  "version": "0.1.0",
+  "description": "Local Browser Agent - Desktop app with API for browser automation",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "npx tsx src/index.ts",
+    "start": "npx tsx src/index.ts",
+    "worker": "npx tsx src/worker/index.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^8.5.0",
+    "bull": "^4.12.0",
+    "fastify": "^4.25.0",
+    "pino": "^8.18.0",
+    "pino-pretty": "^10.3.0",
+    "playwright": "^1.41.0",
+    "sql.js": "^1.10.0",
+    "uuid": "^9.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/bull": "^4.10.0",
+    "@types/node": "^20.10.0",
+    "@types/sql.js": "^1.4.9",
+    "@types/uuid": "^9.0.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0"
+  }
+}
