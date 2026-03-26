@@ -17,6 +17,7 @@
     "bull": "^4.12.0",
     "fastify": "^4.25.0",
     "ollama": "^0.6.3",
+    "openai": "^6.33.0",
     "pino": "^8.18.0",
     "pino-pretty": "^10.3.0",
     "playwright": "^1.41.0",
