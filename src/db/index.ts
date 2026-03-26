@@ -111,6 +111,30 @@ function runMigrations(database: Database) {
     )
   `);
   
+  database.run(`
+    CREATE TABLE IF NOT EXISTS recordings (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      actions TEXT NOT NULL,
+      duration INTEGER,
+      created_at TEXT NOT NULL
+    )
+  `);
+  
+  database.run(`
+    CREATE TABLE IF NOT EXISTS profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      cookies TEXT,
+      local_storage TEXT,
+      session_storage TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL,
+      last_used TEXT
+    )
+  `);
+  
   database.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
   database.run(`CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at)`);
   database.run(`CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id)`);

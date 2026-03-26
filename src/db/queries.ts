@@ -287,3 +287,101 @@ export function setAIConfig(key: string, value: string) {
   db.run(`INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`, [`ai.${key}`, value]);
   saveDb();
 }
+
+export interface Recording {
+  id: string;
+  name: string;
+  description: string | null;
+  actions: string;
+  duration: number;
+  created_at: string;
+}
+
+export interface Profile {
+  id: string;
+  name: string;
+  cookies: string | null;
+  local_storage: string | null;
+  session_storage: string | null;
+  user_agent: string | null;
+  created_at: string;
+  last_used: string | null;
+}
+
+export function createRecording(recording: Omit<Recording, 'id' | 'created_at'>): Recording {
+  const db = getDb();
+  const id = uuidv4();
+  const created_at = new Date().toISOString();
+  db.run(`INSERT INTO recordings (id, name, description, actions, duration, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, recording.name, recording.description, recording.actions, recording.duration, created_at]);
+  saveDb();
+  return { ...recording, id, created_at };
+}
+
+export function getRecordings(): Recording[] {
+  const db = getDb();
+  const result = db.exec('SELECT * FROM recordings ORDER BY created_at DESC');
+  if (result.length === 0) return [];
+  return result[0].values.map(row => {
+    const obj: any = {};
+    result[0].columns.forEach((col, i) => obj[col] = row[i]);
+    return obj as Recording;
+  });
+}
+
+export function getRecording(id: string): Recording | undefined {
+  const db = getDb();
+  const result = db.exec('SELECT * FROM recordings WHERE id = ?', [id]);
+  if (result.length === 0 || result[0].values.length === 0) return undefined;
+  const obj: any = {};
+  result[0].columns.forEach((col, i) => obj[col] = result[0].values[0][i]);
+  return obj as Recording;
+}
+
+export function deleteRecording(id: string) {
+  const db = getDb();
+  db.run('DELETE FROM recordings WHERE id = ?', [id]);
+  saveDb();
+}
+
+export function createProfile(profile: Omit<Profile, 'id' | 'created_at' | 'last_used'>): Profile {
+  const db = getDb();
+  const id = uuidv4();
+  const created_at = new Date().toISOString();
+  db.run(`INSERT INTO profiles (id, name, cookies, local_storage, session_storage, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, profile.name, profile.cookies, profile.local_storage, profile.session_storage, profile.user_agent, created_at]);
+  saveDb();
+  return { ...profile, id, created_at, last_used: null };
+}
+
+export function getProfiles(): Profile[] {
+  const db = getDb();
+  const result = db.exec('SELECT * FROM profiles ORDER BY last_used DESC, created_at DESC');
+  if (result.length === 0) return [];
+  return result[0].values.map(row => {
+    const obj: any = {};
+    result[0].columns.forEach((col, i) => obj[col] = row[i]);
+    return obj as Profile;
+  });
+}
+
+export function getProfile(id: string): Profile | undefined {
+  const db = getDb();
+  const result = db.exec('SELECT * FROM profiles WHERE id = ?', [id]);
+  if (result.length === 0 || result[0].values.length === 0) return undefined;
+  const obj: any = {};
+  result[0].columns.forEach((col, i) => obj[col] = result[0].values[0][i]);
+  return obj as Profile;
+}
+
+export function deleteProfile(id: string) {
+  const db = getDb();
+  db.run('DELETE FROM profiles WHERE id = ?', [id]);
+  saveDb();
+}
+
+export function updateProfileLastUsed(id: string) {
+  const db = getDb();
+  db.run('UPDATE profiles SET last_used = ? WHERE id = ?', [new Date().toISOString(), id]);
+  saveDb();
+}
