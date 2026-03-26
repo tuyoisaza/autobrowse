@@ -8,6 +8,8 @@ export interface ParsedInstruction {
 }
 
 const ACTION_PATTERNS = [
+  { pattern: /^(https?:\/\/[^\s]+)$/i, type: 'open_url', extract: 0 },
+  { pattern: /open\s+(https?:\/\/[^\s]+)/i, type: 'open_url', extract: 1 },
   { pattern: /open (?:the )?site (?:at )?(.+)/i, type: 'open_url', extract: 1 },
   { pattern: /go to (.+)/i, type: 'open_url', extract: 1 },
   { pattern: /visit (.+)/i, type: 'open_url', extract: 1 },

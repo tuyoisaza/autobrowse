@@ -31,10 +31,15 @@ class BrowserManager {
     
     const launchOptions: any = {
       headless: config.headless,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     };
     
-    this.browser = await chromium.launch(launchOptions);
+    try {
+      this.browser = await chromium.launch(launchOptions);
+    } catch (headlessError) {
+      logger.warn('Headless launch failed, trying headless shell', { error: headlessError });
+      this.browser = await chromium.launchHeadless(launchOptions);
+    }
     
     const contextOptions: any = {};
     if (sessionId) {

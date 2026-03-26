@@ -57,7 +57,7 @@ function startRuntime() {
       ...process.env, 
       NODE_ENV: isDev ? 'development' : 'production',
       ELECTRON: 'true',
-      API_PORT: '4847'
+      PORT: '5847'
     }
   });
 

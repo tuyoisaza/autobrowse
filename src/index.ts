@@ -3,15 +3,16 @@ import { initDb } from './db/index.js';
 import { getOrCreateDefaultAgent, getConfig as dbGetConfig } from './db/queries.js';
 import { logger } from './logger/index.js';
 import { createTask, getTask, getTasks, updateTaskStatus, getOrCreateDefaultAgent as getAgent } from './db/queries.js';
-import { addTaskToQueue } from './queue/queue.js';
+import { addTaskToQueue, getQueueSize } from './queue/queue.js';
+import { processTask } from './worker/processor.js';
 
 let config: any = {};
 
 function getAppConfig() {
   if (Object.keys(config).length === 0) {
-    const envPort = typeof process !== 'undefined' && process.env?.API_PORT;
+    const envPort = typeof process !== 'undefined' && (process.env?.API_PORT || process.env?.PORT);
     config = {
-      port: parseInt(envPort || dbGetConfig('port') || '4847', 10),
+      port: parseInt(envPort || dbGetConfig('port') || '5847', 10),
       browser: {
         headless: dbGetConfig('browser.headless') === 'true',
         profilePath: dbGetConfig('browser.profilePath') || './profiles'
@@ -115,6 +116,8 @@ async function main() {
   try {
     await server.listen({ port: cfg.port, host: '127.0.0.1' });
     logger.info('[AutoBrowse] Runtime ready', { port: cfg.port });
+    
+    startWorkerLoop();
   } catch (err) {
     logger.error('Failed to start server', { err });
     throw err;
@@ -125,3 +128,31 @@ main().catch((err) => {
   logger.fatal('[AutoBrowse] Fatal error', { err });
   process.exit(1);
 });
+
+function startWorkerLoop() {
+  logger.info('[Worker] Starting worker loop');
+  
+  async function loop() {
+    try {
+      const queueSize = getQueueSize();
+      
+      if (queueSize > 0) {
+        const pendingTasks = getTasks({ status: 'pending', limit: 1 });
+        
+        if (pendingTasks.length > 0) {
+          for (const task of pendingTasks) {
+            await processTask(task.id);
+          }
+        }
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      loop();
+    } catch (err) {
+      logger.error('[Worker] Error, restarting...', { err });
+      setTimeout(loop, 5000);
+    }
+  }
+  
+  loop();
+}
