@@ -1,0 +1,51 @@
+{
+  "appId": "com.autobrowse.app",
+  "productName": "AutoBrowse",
+  "copyright": "Copyright © 2026 AutoBrowse",
+  "directories": {
+    "output": "release",
+    "buildResources": "build"
+  },
+  "files": [
+    "src/**/*",
+    "electron/**/*",
+    "node_modules/**/*",
+    "!node_modules/**/test/**",
+    "!node_modules/**/tests/**",
+    "!node_modules/**/*.test.ts",
+    "!node_modules/**/*.test.js"
+  ],
+  "extraMetadata": {
+    "main": "electron/main.ts"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "mac": {
+    "target": ["dmg", "zip"],
+    "category": "public.app-category.developer-tools"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "category": "Development"
+  },
+  "asar": true,
+  "asarUnpack": [
+    "node_modules/sql.js/**/*",
+    "node_modules/playwright/**/*"
+  ]
+}

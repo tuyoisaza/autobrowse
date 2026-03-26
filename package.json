@@ -2,12 +2,16 @@
   "name": "autobrowse",
   "version": "0.1.0",
   "description": "Local Browser Agent - Desktop app with API for browser automation",
-  "main": "src/index.ts",
+  "main": "dist-electron/main.mjs",
   "type": "module",
   "scripts": {
     "dev": "npx tsx src/index.ts",
     "start": "npx tsx src/index.ts",
-    "worker": "npx tsx src/worker/index.ts"
+    "worker": "npx tsx src/worker/index.ts",
+    "build:electron": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --outdir=dist-electron --external:electron --external:sql.js --external:playwright --format=esm --out-extension:.js=.mjs",
+    "electron:dev": "npm run build:electron && npx electron .",
+    "dist": "npm run build:electron && electron-builder",
+    "dist:win": "npm run build:electron && electron-builder --win"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",
@@ -27,6 +31,7 @@
     "@types/uuid": "^9.0.0",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.0",
+    "esbuild": "^0.27.4",
     "tsx": "^4.21.0",
     "typescript": "^5.3.0",
     "vite": "^5.0.0"

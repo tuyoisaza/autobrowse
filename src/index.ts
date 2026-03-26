@@ -9,8 +9,9 @@ let config: any = {};
 
 function getAppConfig() {
   if (Object.keys(config).length === 0) {
+    const envPort = typeof process !== 'undefined' && process.env?.API_PORT;
     config = {
-      port: parseInt(dbGetConfig('port') || '3847', 10),
+      port: parseInt(envPort || dbGetConfig('port') || '4847', 10),
       browser: {
         headless: dbGetConfig('browser.headless') === 'true',
         profilePath: dbGetConfig('browser.profilePath') || './profiles'
