@@ -2,7 +2,7 @@ import { createLogger } from '../logger/index.js';
 import { getTask, updateTaskStatus, incrementTaskAttempts, createTaskEvent, getConfig as dbGetConfig } from '../db/queries.js';
 import { browserManager } from '../browser/manager.js';
 import { executeAction } from '../browser/actions.js';
-import { parseInstruction } from './interpreter.js';
+import { parseInstructionAsync } from './interpreter.js';
 import * as fs from 'fs';
 
 const logger = createLogger('worker');
@@ -39,7 +39,7 @@ export async function processTask(taskId: string): Promise<void> {
   try {
     await browserManager.initialize(task.session_id || undefined);
     
-    const parsed = parseInstruction(task.instruction);
+    const parsed = await parseInstructionAsync(task.instruction);
     
     for (let i = 0; i < parsed.actions.length; i++) {
       const action = parsed.actions[i];

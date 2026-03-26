@@ -5,6 +5,7 @@ import { logger } from './logger/index.js';
 import { createTask, getTask, getTasks, updateTaskStatus, getOrCreateDefaultAgent as getAgent } from './db/queries.js';
 import { addTaskToQueue, getQueueSize } from './queue/queue.js';
 import { processTask } from './worker/processor.js';
+import { aiGateway } from './ai/gateway.js';
 
 let config: any = {};
 
@@ -129,6 +130,37 @@ async function main() {
       task: cfg.task,
       agent: { id: agent.id, name: agent.name }
     };
+  });
+  
+  server.get('/ai/config', async () => ({ config: aiGateway.getConfig() }));
+
+  server.put('/ai/config', async (request: any) => {
+    const { provider, model, apiKey, enabled, fallback } = request.body || {};
+    await aiGateway.updateConfig({ 
+      provider, 
+      local: { url: 'http://localhost:11434', model }, 
+      cloud: { apiKey, model }, 
+      enabled, 
+      fallback 
+    });
+    return { success: true, config: aiGateway.getConfig() };
+  });
+
+  server.get('/ai/models', async (request: any) => {
+    const { provider } = request.query || {};
+    if (provider === 'local' || provider === 'cloud') {
+      return { provider, models: await aiGateway.listModels(provider) };
+    }
+    return {
+      local: await aiGateway.listModels('local'),
+      cloud: await aiGateway.listModels('cloud')
+    };
+  });
+
+  server.post('/ai/test', async (request: any) => {
+    const { provider, model } = request.body || {};
+    const available = await aiGateway.testProvider(provider || 'local', model);
+    return { available };
   });
   
   try {

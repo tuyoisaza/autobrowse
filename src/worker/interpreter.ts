@@ -1,5 +1,6 @@
 import { createLogger } from '../logger/index.js';
 import { BrowserAction } from '../browser/actions.js';
+import { aiGateway } from '../ai/gateway.js';
 
 const logger = createLogger('interpreter');
 
@@ -165,4 +166,18 @@ export function parseInstruction(instruction: string): { actions: BrowserAction[
 
   logger.info('Instruction parsed', { actionCount: actions.length });
   return { actions };
+}
+
+export async function parseInstructionAsync(instruction: string, pageContext?: string): Promise<{ actions: BrowserAction[] }> {
+  try {
+    const actions = await aiGateway.parseInstruction(instruction, pageContext);
+    if (actions.length > 0) {
+      logger.info('AI parsed instruction', { actionCount: actions.length });
+      return { actions };
+    }
+  } catch (err) {
+    logger.warn('AI parsing failed, using regex', { err });
+  }
+  
+  return parseInstruction(instruction);
 }
