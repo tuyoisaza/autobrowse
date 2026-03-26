@@ -6,6 +6,9 @@ import { createTask, getTask, getTasks, updateTaskStatus, getOrCreateDefaultAgen
 import { addTaskToQueue, getQueueSize } from './queue/queue.js';
 import { processTask } from './worker/processor.js';
 import { aiGateway } from './ai/gateway.js';
+import { recorder } from './recorder/manager.js';
+import { replayer } from './recorder/replayer.js';
+import { getProfiles, getProfile, deleteProfile, createProfileFromCurrent, loadProfile } from './profiles/store.js';
 
 let config: any = {};
 
