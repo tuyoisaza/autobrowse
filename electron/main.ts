@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } from 'electron';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -10,6 +10,8 @@ const isDev = !app.isPackaged;
 
 let mainWindow: BrowserWindow | null = null;
 let runtimeProcess: ChildProcess | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -40,6 +42,59 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+}
+
+function createTray() {
+  const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAADfSURBVDiNpZMxDoJAEEXfLhZQGO/AUmygnsDKA9h6Ag9g4Qk8gYUn0MNKbCyFGDDG7CZZXYwpd/Nm8mcy829nZwH+qoC6q8wCmAGH+gfXAD7AYBdw7gFsJqCdY0YCeCWAywTwlAAuE8BTAvjKArhMAN8JYCWAywTwlQBWCWB9A/hJANcCWCWAVQJYJYBVAlj1A/hJANcJ4DoBXCeA6wRwnQCuE8B1ArhOj66DdQK4To+ug3UCuE4AVwngdN3dHf0Cq7h+V3f+AL5dN2L3D3KkAAAAAElFTkSuQmCC');
+  
+  tray = new Tray(icon);
+  
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open AutoBrowse',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    {
+      label: 'New Task',
+      click: () => {
+        console.log('New task clicked');
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  
+  tray.setToolTip('AutoBrowse');
+  tray.setContextMenu(contextMenu);
+  
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
   });
 }
 
@@ -82,6 +137,7 @@ function startRuntime() {
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
   
   setTimeout(() => {
     startRuntime();
