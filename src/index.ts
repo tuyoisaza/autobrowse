@@ -92,7 +92,10 @@ async function main() {
   server.get('/debug', async () => ({ 
     debug: isDebugMode(),
     version: 'v0.2.0',
-    git: process.env.GIT_SHA?.slice(0,7) || 'dev'
+    git: process.env.GIT_SHA?.slice(0,7) || 'dev',
+    build: new Date().toISOString(),
+    port: cfg.port,
+    queueSize: getQueueSize()
   }));
   
   server.put('/debug', async (request: any) => {
@@ -195,9 +198,11 @@ async function main() {
     } else if (result?.status === 'failed') {
       return { status: 'FAILED', message: result.error };
     } else if (result?.status === 'running') {
-      return { status: 'FAILED', message: 'Task timed out while running' };
+      return { status: 'FAILED', message: 'Task timed out after 15s', details: { taskId: task.id, status: 'running' } };
+    } else if (result?.status === 'pending') {
+      return { status: 'FAILED', message: 'Task still pending - worker may be stuck', details: { taskId: task.id, status: 'pending', attempts: result.attempts } };
     }
-    return { status: 'FAILED', message: 'Task still running or unknown error' };
+    return { status: 'FAILED', message: 'Unknown task state', details: { taskId: task.id, status: result?.status, attempts: result?.attempts } };
   });
   
   server.post('/tasks', async (request: any) => {

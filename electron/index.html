@@ -25,10 +25,45 @@
       color: #fff;
       margin-bottom: 5px;
     }
+    .version-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 30px;
+    }
     .subtitle {
       color: #888;
       margin-bottom: 40px;
       font-size: 1.1em;
+    }
+    .version {
+      color: #666;
+      font-size: 0.85em;
+      background: #0f3460;
+      padding: 5px 12px;
+      border-radius: 15px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .copy-btn {
+      background: transparent;
+      border: 1px solid #444;
+      color: #888;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75em;
+    }
+    .copy-btn:hover {
+      background: #333;
+      color: #fff;
+    }
+    .copy-btn.copied {
+      background: #4caf50;
+      border-color: #4caf50;
+      color: #fff;
     }
     .prompt-box {
       background: #0f3460;
@@ -109,11 +144,23 @@
       margin-right: 10px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .session-info {
+      margin-top: 15px;
+      color: #666;
+      font-size: 0.85em;
+    }
+    .session-info.active {
+      color: #4caf50;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🔍 AutoBrowse</h1>
+    <h1>AutoBrowse</h1>
+    <div class="version-row">
+      <span class="version" id="versionDisplay">v0.2.0</span>
+      <button class="copy-btn" id="copyBtn" title="Copy debug info">Copy</button>
+    </div>
     <p class="subtitle">Type what you want me to do</p>
     
     <div class="prompt-box">
@@ -122,7 +169,7 @@
           placeholder="e.g., go to github.com and get the title" 
           autofocus>
         <br>
-        <button type="submit" class="btn" id="submitBtn">Go →</button>
+        <button type="submit" class="btn" id="submitBtn">Go</button>
       </form>
     </div>
     
@@ -134,10 +181,63 @@
     <div id="result">
       <div id="resultContent"></div>
     </div>
+    
+    <div class="session-info" id="sessionInfo">
+      Session: <span id="sessionStatus">Checking...</span>
+    </div>
   </div>
 
   <script>
     const API = 'http://127.0.0.1:5847';
+    const VERSION = 'v0.2.0';
+    const BUILD = new Date().toISOString();
+    
+    document.getElementById('versionDisplay').textContent = VERSION;
+    
+    // Copy debug info
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      const session = await fetch(`${API}/sessions`).then(r => r.json()).catch(() => []);
+      const debug = await fetch(`${API}/debug`).then(r => r.json()).catch(() => {});
+      const tasks = await fetch(`${API}/tasks?limit=5`).then(r => r.json()).catch(() => []);
+      
+      const report = `AutoBrowse Debug Report
+========================
+Version: ${VERSION}
+Build: ${BUILD}
+Git: ${debug.git || 'dev'}
+
+Session:
+${JSON.stringify(session, null, 2)}
+
+Recent Tasks:
+${JSON.stringify(tasks.slice(0,3), null, 2)}
+`;
+      
+      await navigator.clipboard.writeText(report);
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+    
+    // Check session status
+    async function checkSession() {
+      try {
+        const session = await fetch(`${API}/sessions`).then(r => r.json());
+        const el = document.getElementById('sessionStatus');
+        if (session.length > 0 && session[0].active) {
+          el.textContent = `Active: ${session[0].id}`;
+          el.parentElement.classList.add('active');
+        } else {
+          el.textContent = 'Inactive';
+        }
+      } catch {}
+    }
+    checkSession();
+    setInterval(checkSession, 5000);
     
     document.getElementById('promptForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -164,7 +264,15 @@
         loading.classList.remove('show');
         result.classList.add('show');
         
-        if (data.success) {
+        // New response format: {status: 'OK'|'FAILED', message?: string}
+        if (data.status === 'OK') {
+          resultContent.innerHTML = `<pre class="success">OK - Instruction completed successfully</pre>`;
+        } else if (data.status === 'FAILED') {
+          const msg = data.message || 'Unknown error';
+          const details = data.details ? `\n\nDetails: ${JSON.stringify(data.details)}` : '';
+          resultContent.innerHTML = `<pre class="error">FAILED: ${msg}${details}</pre>`;
+        } else if (data.success) {
+          // Legacy format
           let resultText = data.result || 'Done!';
           try {
             const parsed = JSON.parse(data.result);
@@ -181,6 +289,7 @@
       }
       
       btn.disabled = false;
+      checkSession();
     });
   </script>
 </body>
