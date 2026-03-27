@@ -178,6 +178,7 @@ async function main() {
     
     logger.info('[Prompt] Task created, processing', { taskId: task.id });
     
+    await addTaskToQueue(task.id);
     await processTask(task.id);
     
     logger.info('[Prompt] Task processed, getting result', { taskId: task.id });

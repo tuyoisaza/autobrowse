@@ -3,6 +3,7 @@ import { getTask, updateTaskStatus, incrementTaskAttempts, createTaskEvent, getC
 import { browserManager } from '../browser/manager.js';
 import { executeAction } from '../browser/actions.js';
 import { parseInstructionAsync } from './interpreter.js';
+import { removeFromQueue } from '../queue/queue.js';
 import * as fs from 'fs';
 
 const logger = createLogger('worker');
@@ -77,6 +78,7 @@ export async function processTask(taskId: string): Promise<void> {
     
     updateTaskStatus(taskId, 'completed', JSON.stringify({ finalState }));
     logger.info('Task completed', { taskId });
+    await removeFromQueue(taskId);
 
   } catch (err) {
     logger.error('Task failed', { taskId, err });
@@ -89,5 +91,6 @@ export async function processTask(taskId: string): Promise<void> {
     } else {
       updateTaskStatus(taskId, 'failed', undefined, String(err));
     }
+    await removeFromQueue(taskId);
   }
 }
