@@ -28,6 +28,8 @@ export async function processTask(taskId: string): Promise<void> {
     return;
   }
   
+  logger.info('Task instruction', { taskId, instruction: task.instruction });
+  
   const config = getWorkerConfig();
   updateTaskStatus(taskId, 'running');
   

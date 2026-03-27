@@ -95,7 +95,7 @@ async function main() {
       return { error: 'Provide instruction as body text, {"instruction": "..."}, or {"text": "..."}' };
     }
 
-    logger.info('[Prompt] Executing', { instruction });
+    logger.info('[Prompt] Creating task', { instruction });
     
     const task = createTask({
       agent_id: getAgent().id,
@@ -109,15 +109,31 @@ async function main() {
       error: null
     });
     
+    logger.info('[Prompt] Task created, processing', { taskId: task.id });
+    
     await processTask(task.id);
     
-    const result = getTask(task.id);
-    if (result?.status === 'completed') {
-      return { success: true, result: result.result, task_id: task.id };
-    } else if (result?.status === 'failed') {
-      return { success: false, error: result.error, task_id: task.id };
+    logger.info('[Prompt] Task processed, getting result', { taskId: task.id });
+    
+    let result = getTask(task.id);
+    let waitCount = 0;
+    while (result && result.status === 'running' && waitCount < 30) {
+      logger.info('[Prompt] Waiting for task', { taskId: task.id, status: result.status, waitCount });
+      await new Promise(r => setTimeout(r, 500));
+      result = getTask(task.id);
+      waitCount++;
     }
-    return { success: false, error: 'Task still running or unknown error' };
+    
+    logger.info('[Prompt] Task final status', { taskId: task.id, status: result?.status, attempts: result?.attempts });
+    
+    if (result?.status === 'completed') {
+      return { success: true, result: result.result, task_id: task.id, status: 'completed' };
+    } else if (result?.status === 'failed') {
+      return { success: false, error: result.error, task_id: task.id, status: 'failed', attempts: result.attempts };
+    } else if (result?.status === 'running') {
+      return { success: false, error: 'Task timed out while running', task_id: task.id, status: 'timeout' };
+    }
+    return { success: false, error: 'Task still running or unknown error', task_id: task.id, status: result?.status };
   });
   
   server.post('/tasks', async (request: any) => {
