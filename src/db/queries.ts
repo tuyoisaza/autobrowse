@@ -385,3 +385,73 @@ export function updateProfileLastUsed(id: string) {
   db.run('UPDATE profiles SET last_used = ? WHERE id = ?', [new Date().toISOString(), id]);
   saveDb();
 }
+
+export function getSystem(key: string): string | undefined {
+  const db = getDb();
+  const result = db.exec('SELECT value FROM system WHERE key = ?', [key]);
+  if (result.length === 0 || result[0].values.length === 0) return undefined;
+  return result[0].values[0][0] as string;
+}
+
+export function setSystem(key: string, value: string, description?: string) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.run(`INSERT OR REPLACE INTO system (key, value, description, updated_at) VALUES (?, ?, ?, ?)`,
+    [key, value, description || null, now]);
+  saveDb();
+}
+
+export function isDebugMode(): boolean {
+  return getSystem('debug') === 'true';
+}
+
+export function setDebugMode(enabled: boolean) {
+  setSystem('debug', enabled ? 'true' : 'false', 'Debug mode flag');
+}
+
+export interface FeatureFlag {
+  id: string;
+  name: string;
+  enabled: boolean;
+  scope: string;
+  user_id: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getFeatureFlags(): FeatureFlag[] {
+  const db = getDb();
+  const result = db.exec('SELECT * FROM feature_flags WHERE expires_at IS NULL OR expires_at > ?', [new Date().toISOString()]);
+  if (result.length === 0) return [];
+  return result[0].values.map(row => {
+    const obj: any = {};
+    result[0].columns.forEach((col, i) => obj[col] = row[i]);
+    return obj as FeatureFlag;
+  });
+}
+
+export function getFeatureFlag(name: string): FeatureFlag | undefined {
+  const db = getDb();
+  const result = db.exec('SELECT * FROM feature_flags WHERE name = ? AND (expires_at IS NULL OR expires_at > ?)',
+    [name, new Date().toISOString()]);
+  if (result.length === 0 || result[0].values.length === 0) return undefined;
+  const obj: any = {};
+  result[0].columns.forEach((col, i) => obj[col] = result[0].values[0][i]);
+  return obj as FeatureFlag;
+}
+
+export function isFeatureEnabled(name: string): boolean {
+  const flag = getFeatureFlag(name);
+  return flag?.enabled ?? false;
+}
+
+export function setFeatureFlag(name: string, enabled: boolean, scope: string = 'global', expiresAt?: string) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const id = `ff_${name}`;
+  db.run(`INSERT OR REPLACE INTO feature_flags (id, name, enabled, scope, expires_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, name, enabled ? 1 : 0, scope, expiresAt || null, now, now]);
+  saveDb();
+}

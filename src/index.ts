@@ -11,7 +11,8 @@ import { processTask } from './worker/processor.js';
 import { aiGateway } from './ai/gateway.js';
 import { recorder } from './recorder/manager.js';
 import { replayer } from './recorder/replayer.js';
-import { getProfiles, getProfile, deleteProfile, createProfileFromCurrent, loadProfile } from './profiles/store.js';
+import { createProfileFromCurrent, loadProfile } from './profiles/store.js';
+import { isDebugMode, setDebugMode, getFeatureFlags, getFeatureFlag, setFeatureFlag } from './db/queries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,7 +85,64 @@ async function main() {
     reply.type('text/html').send(html);
   });
   
-  server.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  server.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: 'v0.2.0', build: new Date().toISOString() }));
+  
+  server.get('/debug', async () => ({ 
+    debug: isDebugMode(),
+    version: 'v0.2.0',
+    git: process.env.GIT_SHA?.slice(0,7) || 'dev'
+  }));
+  
+  server.put('/debug', async (request: any) => {
+    const { enabled } = request.body || {};
+    setDebugMode(enabled);
+    return { success: true, debug: isDebugMode() };
+  });
+
+  server.get('/flags', async () => ({ flags: getFeatureFlags() }));
+  
+  server.get('/admin', async () => ({
+    version: 'v0.2.0',
+    build: new Date().toISOString(),
+    debug: isDebugMode(),
+    stats: {
+      tasks: getTasks({ limit: 1000 }).length,
+      recordings: getRecordings().length,
+      profiles: getProfiles().length
+    }
+  }));
+  
+  server.get('/admin/system', async () => {
+    const debug = isDebugMode();
+    const flags = getFeatureFlags();
+    return { debug, flags };
+  });
+  
+  server.put('/admin/system', async (request: any) => {
+    const { debug, flags } = request.body || {};
+    if (typeof debug === 'boolean') {
+      setDebugMode(debug);
+    }
+    if (flags) {
+      for (const [name, enabled] of Object.entries(flags)) {
+        setFeatureFlag(name, enabled);
+      }
+    }
+    return { success: true };
+  });
+  
+  server.get('/admin/audit', async () => {
+    const tasks = getTasks({ limit: 50 });
+    const recordings = getRecordings().slice(0, 20);
+    return { tasks, recordings };
+  });
+   
+  server.put('/flags/:name', async (request: any) => {
+    const { name } = request.params;
+    const { enabled, expiresAt } = request.body || {};
+    setFeatureFlag(name, enabled, 'global', expiresAt);
+    return { success: true, flag: getFeatureFlag(name) };
+  });
   
   server.post('/prompt', async (request: any, reply: any) => {
     const instruction = typeof request.body === 'string' 

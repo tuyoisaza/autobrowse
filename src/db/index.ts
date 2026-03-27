@@ -135,6 +135,28 @@ function runMigrations(database: Database) {
     )
   `);
   
+  database.run(`
+    CREATE TABLE IF NOT EXISTS system (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      description TEXT,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  
+  database.run(`
+    CREATE TABLE IF NOT EXISTS feature_flags (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      enabled BOOLEAN NOT NULL DEFAULT 1,
+      scope TEXT NOT NULL DEFAULT 'global',
+      user_id TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  
   database.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
   database.run(`CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at)`);
   database.run(`CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id)`);

@@ -1,12 +1,21 @@
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogMeta {
+  correlationId?: string;
   [key: string]: any;
+}
+
+let globalCorrelationId = 0;
+
+function generateCorrelationId(): string {
+  globalCorrelationId++;
+  return `${Date.now().toString(36)}-${globalCorrelationId.toString(36)}`;
 }
 
 class SimpleLogger {
   private level: LogLevel;
   private module: string;
+  private correlationId?: string;
 
   constructor(module: string, level: LogLevel = 'info') {
     this.module = module;
@@ -20,8 +29,9 @@ class SimpleLogger {
 
   private format(level: string, message: string, meta?: LogMeta): string {
     const timestamp = new Date().toISOString();
+    const corrId = meta?.correlationId || this.correlationId || '-';
     const metaStr = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
-    return `[${timestamp}] ${level.toUpperCase()} [${this.module}] ${message}${metaStr}`;
+    return `[${timestamp}] ${level.toUpperCase()} [${this.module}] [corr:${corrId}] ${message}${metaStr}`;
   }
 
   debug(message: string, meta?: LogMeta): void {
@@ -52,8 +62,16 @@ class SimpleLogger {
     console.error(this.format('fatal', message, meta));
   }
 
-  child(options: { module: string }): SimpleLogger {
-    return new SimpleLogger(options.module, this.level);
+  child(options: { module: string; correlationId?: string }): SimpleLogger {
+    const child = new SimpleLogger(options.module, this.level);
+    child.correlationId = options.correlationId || this.correlationId || generateCorrelationId();
+    return child;
+  }
+
+  withCorrelationId(correlationId: string): SimpleLogger {
+    const child = new SimpleLogger(this.module, this.level);
+    child.correlationId = correlationId;
+    return child;
   }
 }
 
@@ -62,4 +80,8 @@ export const logger = new SimpleLogger('root', rootLevel);
 
 export function createLogger(name: string): SimpleLogger {
   return logger.child({ module: name });
+}
+
+export function generateId(): string {
+  return generateCorrelationId();
 }
