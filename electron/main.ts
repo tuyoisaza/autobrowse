@@ -1,7 +1,9 @@
 import { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } from 'electron';
 import * as path from 'path';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import * as https from 'https';
+import * as http from 'http';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +14,49 @@ let mainWindow: BrowserWindow | null = null;
 let runtimeProcess: ChildProcess | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+
+const cliInstruction = process.argv.find(a => a.startsWith('--instruction='))?.split('=')[1] || process.env.AUTOBROWSE_INSTRUCTION;
+
+function waitForServer(port: number, timeout = 30000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const check = () => {
+      const req = (port === 443 ? https : http).get(`http://127.0.0.1:${port}/health`, (res) => {
+        if (res.statusCode === 200) resolve();
+        else retry();
+      });
+      req.on('error', retry);
+    };
+    const retry = () => {
+      if (Date.now() - startTime > timeout) reject(new Error('Timeout'));
+      else setTimeout(check, 500);
+    };
+    check();
+  });
+}
+
+async function runCliInstruction(instruction: string) {
+  console.log('[CLI] Running instruction:', instruction);
+  await waitForServer(5847);
+  
+  const data = JSON.stringify({ instruction });
+  const req = http.request({
+    hostname: '127.0.0.1',
+    port: 5847,
+    path: '/prompt',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+  }, (res) => {
+    let body = '';
+    res.on('data', chunk => body += chunk);
+    res.on('end', () => {
+      console.log('[CLI] Result:', body);
+      app.quit();
+    });
+  });
+  req.write(data);
+  req.end();
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -34,7 +79,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://127.0.0.1:3847');
+    mainWindow.loadURL('http://127.0.0.1:5847');
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
@@ -135,7 +180,14 @@ function startRuntime() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (cliInstruction) {
+    startRuntime();
+    await waitForServer(5847, 60000);
+    await runCliInstruction(cliInstruction);
+    return;
+  }
+  
   createWindow();
   createTray();
   
@@ -166,7 +218,7 @@ ipcMain.handle('open-external', (_event, url: string) => {
   shell.openExternal(url);
 });
 
-ipcMain.handle('get-api-port', () => 3847);
+ipcMain.handle('get-api-port', () => 5847);
 
 ipcMain.handle('get-app-path', () => {
   return app.getPath('userData');

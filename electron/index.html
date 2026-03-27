@@ -4,149 +4,184 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AutoBrowse</title>
-  <link rel="stylesheet" href="styles.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      width: 100%;
+      max-width: 700px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2.5em;
+      color: #fff;
+      margin-bottom: 5px;
+    }
+    .subtitle {
+      color: #888;
+      margin-bottom: 40px;
+      font-size: 1.1em;
+    }
+    .prompt-box {
+      background: #0f3460;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+    #instruction {
+      width: 100%;
+      padding: 15px 20px;
+      font-size: 1.1em;
+      border: 2px solid #e94560;
+      border-radius: 8px;
+      background: #1a1a2e;
+      color: #fff;
+      outline: none;
+    }
+    #instruction:focus {
+      border-color: #ff6b8a;
+      box-shadow: 0 0 20px rgba(233,69,96,0.3);
+    }
+    #instruction::placeholder {
+      color: #666;
+    }
+    .btn {
+      background: #e94560;
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 1.1em;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 15px;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #ff6b8a;
+      transform: translateY(-2px);
+    }
+    .btn:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 30px;
+      background: #0f3460;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: left;
+      display: none;
+    }
+    #result.show { display: block; }
+    #result pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #aaa;
+      font-size: 0.9em;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .error { color: #f44336 !important; }
+    .success { color: #4caf50 !important; }
+    #loading {
+      display: none;
+      margin-top: 20px;
+      color: #e94560;
+    }
+    #loading.show { display: block; }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #333;
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>AutoBrowse</h1>
-      <div>
-        <button class="btn" onclick="showNewTaskModal()">+ New Task</button>
-        <button class="btn btn-secondary" onclick="startRecording()">● Record</button>
-      </div>
+    <h1>🔍 AutoBrowse</h1>
+    <p class="subtitle">Type what you want me to do</p>
+    
+    <div class="prompt-box">
+      <form id="promptForm">
+        <input type="text" id="instruction" 
+          placeholder="e.g., go to github.com and get the title" 
+          autofocus>
+        <br>
+        <button type="submit" class="btn" id="submitBtn">Go →</button>
+      </form>
     </div>
-
-    <div class="stats">
-      <div class="stat-card">
-        <div class="value" id="totalTasks">-</div>
-        <div class="label">Total Tasks</div>
-      </div>
-      <div class="stat-card">
-        <div class="value" id="completedTasks">-</div>
-        <div class="label">Completed</div>
-      </div>
-      <div class="stat-card">
-        <div class="value" id="activeTasks">-</div>
-        <div class="label">Running</div>
-      </div>
-      <div class="stat-card">
-        <div class="value" id="recordingsCount">-</div>
-        <div class="label">Recordings</div>
-      </div>
+    
+    <div id="loading">
+      <span class="spinner"></span>
+      <span id="loadingText">Working...</span>
     </div>
-
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('tasks')">Tasks</div>
-      <div class="tab" onclick="switchTab('recordings')">Recordings</div>
-      <div class="tab" onclick="switchTab('profiles')">Profiles</div>
-      <div class="tab" onclick="switchTab('settings')">Settings</div>
-    </div>
-
-    <div id="tasksSection" class="section">
-      <h2>Recent Tasks</h2>
-      <ul class="list" id="tasksList"><li class="loading">Loading...</li></ul>
-    </div>
-
-    <div id="recordingsSection" class="section" style="display:none">
-      <h2>Recordings</h2>
-      <ul class="list" id="recordingsList"><li class="loading">Loading...</li></ul>
-    </div>
-
-    <div id="profilesSection" class="section" style="display:none">
-      <h2>Browser Profiles</h2>
-      <ul class="list" id="profilesList"><li class="loading">Loading...</li></ul>
-    </div>
-
-    <div id="settingsSection" class="section" style="display:none">
-      <h2>Settings</h2>
-      <p>AI Configuration, Browser Settings, etc.</p>
+    
+    <div id="result">
+      <div id="resultContent"></div>
     </div>
   </div>
 
   <script>
-    function switchTab(tab) {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      event.target.classList.add('active');
-      document.getElementById('tasksSection').style.display = tab === 'tasks' ? 'block' : 'none';
-      document.getElementById('recordingsSection').style.display = tab === 'recordings' ? 'block' : 'none';
-      document.getElementById('profilesSection').style.display = tab === 'profiles' ? 'block' : 'none';
-      document.getElementById('settingsSection').style.display = tab === 'settings' ? 'block' : 'none';
-    }
-
-    async function loadData() {
+    const API = 'http://127.0.0.1:5847';
+    
+    document.getElementById('promptForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const instruction = document.getElementById('instruction').value.trim();
+      if (!instruction) return;
+      
+      const btn = document.getElementById('submitBtn');
+      const loading = document.getElementById('loading');
+      const result = document.getElementById('result');
+      const resultContent = document.getElementById('resultContent');
+      
+      btn.disabled = true;
+      loading.classList.add('show');
+      result.classList.remove('show');
+      
       try {
-        const tasksRes = await fetch('http://127.0.0.1:5847/tasks?limit=10');
-        const tasks = await tasksRes.json();
-        const recordingsRes = await fetch('http://127.0.0.1:5847/recordings');
-        const recordings = await recordingsRes.json();
-        const profilesRes = await fetch('http://127.0.0.1:5847/profiles');
-        const profiles = await profilesRes.json();
-
-        document.getElementById('totalTasks').textContent = tasks.length;
-        document.getElementById('completedTasks').textContent = tasks.filter(t => t.status === 'completed').length;
-        document.getElementById('activeTasks').textContent = tasks.filter(t => t.status === 'running').length;
-        document.getElementById('recordingsCount').textContent = recordings.recordings?.length || 0;
-
-        document.getElementById('tasksList').innerHTML = tasks.length ? '' : '<li class="list-item">No tasks yet</li>';
-        tasks.forEach(task => addTaskToList(task));
-
-        document.getElementById('recordingsList').innerHTML = recordings.recordings?.length ? '' : '<li class="list-item">No recordings yet</li>';
-        recordings.recordings?.forEach(rec => addRecordingToList(rec));
-
-        document.getElementById('profilesList').innerHTML = profiles.profiles?.length ? '' : '<li class="list-item">No profiles yet</li>';
-        profiles.profiles?.forEach(prof => addProfileToList(prof));
-      } catch (err) { console.error('Failed to load data:', err); }
-    }
-
-    function addTaskToList(task) {
-      const li = document.createElement('li');
-      li.className = 'list-item';
-      li.innerHTML = `<div><strong>${task.instruction.substring(0, 50)}${task.instruction.length > 50 ? '...' : ''}</strong><br><small>${new Date(task.created_at).toLocaleString()}</small></div><span class="status-badge status-${task.status}">${task.status}</span>`;
-      document.getElementById('tasksList').appendChild(li);
-    }
-
-    function addRecordingToList(rec) {
-      const li = document.createElement('li');
-      li.className = 'list-item';
-      li.innerHTML = `<div><strong>${rec.name}</strong><br><small>${rec.duration}ms • ${new Date(rec.created_at).toLocaleString()}</small></div><div><button class="btn" onclick="playRecording('${rec.id}')">▶ Play</button><button class="btn btn-danger" onclick="deleteRecording('${rec.id}')">×</button></div>`;
-      document.getElementById('recordingsList').appendChild(li);
-    }
-
-    function addProfileToList(prof) {
-      const li = document.createElement('li');
-      li.className = 'list-item';
-      li.innerHTML = `<div><strong>${prof.name}</strong><br><small>${new Date(prof.created_at).toLocaleString()}</small></div><button class="btn btn-danger" onclick="deleteProfile('${prof.id}')">×</button>`;
-      document.getElementById('profilesList').appendChild(li);
-    }
-
-    function startRecording() {
-      const name = prompt('Recording name:');
-      if (name) {
-        fetch('http://127.0.0.1:5847/recordings', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name }) }).then(() => alert('Recording started!'));
+        const res = await fetch(`${API}/prompt`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction })
+        });
+        const data = await res.json();
+        
+        loading.classList.remove('show');
+        result.classList.add('show');
+        
+        if (data.success) {
+          let resultText = data.result || 'Done!';
+          try {
+            const parsed = JSON.parse(data.result);
+            resultText = JSON.stringify(parsed, null, 2);
+          } catch {}
+          resultContent.innerHTML = `<pre class="success">${resultText}</pre>`;
+        } else {
+          resultContent.innerHTML = `<pre class="error">${data.error || 'Unknown error'}</pre>`;
+        }
+      } catch (err) {
+        loading.classList.remove('show');
+        result.classList.add('show');
+        resultContent.innerHTML = `<pre class="error">Connection error: ${err.message}</pre>`;
       }
-    }
-
-    function playRecording(id) {
-      fetch(`http://127.0.0.1:5847/recordings/${id}/play`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ speed: 1 }) });
-    }
-
-    function deleteRecording(id) {
-      if (confirm('Delete recording?')) { fetch(`http://127.0.0.1:5847/recordings/${id}`, { method: 'DELETE' }).then(loadData); }
-    }
-
-    function deleteProfile(id) {
-      if (confirm('Delete profile?')) { fetch(`http://127.0.0.1:5847/profiles/${id}`, { method: 'DELETE' }).then(loadData); }
-    }
-
-    function showNewTaskModal() {
-      const instruction = prompt('Enter instruction:');
-      if (instruction) {
-        fetch('http://127.0.0.1:5847/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ instruction }) }).then(() => loadData());
-      }
-    }
-
-    loadData();
-    setInterval(loadData, 5000);
+      
+      btn.disabled = false;
+    });
   </script>
 </body>
 </html>

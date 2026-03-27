@@ -1,4 +1,7 @@
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { initDb } from './db/index.js';
 import { getOrCreateDefaultAgent, getConfig as dbGetConfig, setAIConfig } from './db/queries.js';
 import { logger } from './logger/index.js';
@@ -73,6 +76,50 @@ async function main() {
   const server = Fastify();
   
   server.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+  server.get('/', async () => ({
+    message: 'AutoBrowse API running. Use /prompt to execute instructions.',
+    endpoints: {
+      prompt: 'POST /prompt - Execute instruction directly',
+      tasks: 'POST /tasks - Create task in queue',
+      recordings: 'GET/POST /recordings',
+      profiles: 'GET/POST /profiles'
+    }
+  }));
+
+  server.post('/prompt', async (request: any, reply: any) => {
+    const instruction = typeof request.body === 'string' 
+      ? request.body 
+      : request.body?.instruction || request.body?.text;
+    
+    if (!instruction) {
+      return { error: 'Provide instruction as body text, {"instruction": "..."}, or {"text": "..."}' };
+    }
+
+    logger.info('[Prompt] Executing', { instruction });
+    
+    const task = createTask({
+      agent_id: getAgent().id,
+      instruction,
+      payload: null,
+      priority: 1,
+      session_id: null,
+      started_at: null,
+      finished_at: null,
+      result: null,
+      error: null
+    });
+    
+    await processTask(task.id);
+    
+    const result = getTask(task.id);
+    if (result?.status === 'completed') {
+      return { success: true, result: result.result, task_id: task.id };
+    } else if (result?.status === 'failed') {
+      return { success: false, error: result.error, task_id: task.id };
+    }
+    return { success: false, error: 'Task still running or unknown error' };
+  });
   
   server.post('/tasks', async (request: any) => {
     const { instruction, payload, priority = 1, session_id } = request.body || {};
