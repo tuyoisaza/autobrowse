@@ -13,6 +13,9 @@ import { recorder } from './recorder/manager.js';
 import { replayer } from './recorder/replayer.js';
 import { getProfiles, getProfile, deleteProfile, createProfileFromCurrent, loadProfile } from './profiles/store.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 let config: any = {};
 
 function getAppConfig() {
@@ -75,18 +78,14 @@ async function main() {
   
   const server = Fastify();
   
+  server.get('/', async (request, reply) => {
+    const fs = await import('fs');
+    const html = fs.readFileSync(path.join(__dirname, '../electron/index.html'), 'utf-8');
+    reply.type('text/html').send(html);
+  });
+  
   server.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
-
-  server.get('/', async () => ({
-    message: 'AutoBrowse API running. Use /prompt to execute instructions.',
-    endpoints: {
-      prompt: 'POST /prompt - Execute instruction directly',
-      tasks: 'POST /tasks - Create task in queue',
-      recordings: 'GET/POST /recordings',
-      profiles: 'GET/POST /profiles'
-    }
-  }));
-
+  
   server.post('/prompt', async (request: any, reply: any) => {
     const instruction = typeof request.body === 'string' 
       ? request.body 
