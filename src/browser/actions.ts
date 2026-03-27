@@ -57,6 +57,41 @@ export async function type(page: Page, selector: string, text: string): Promise<
   }
 }
 
+export async function searchOnPage(page: Page, query: string): Promise<ActionResult> {
+  try {
+    const searchInputs = [
+      'textarea[name="q"]',
+      'input[name="q"]',
+      'input[type="search"]',
+      'input[type="text"][aria-label*="Search"]',
+      'input[type="text"][name="q"]',
+      'input[type="text"][title="Search"]',
+      'form[action="/search"] input[type="text"]',
+      'textarea.lp-theme',
+      'input[type="text"]'
+    ];
+    let input = null;
+    
+    for (const sel of searchInputs) {
+      input = await page.$(sel);
+      if (input) break;
+    }
+    
+    if (!input) {
+      await page.keyboard.type(query);
+      await page.keyboard.press('Enter');
+      return { success: true };
+    }
+    
+    await input.fill(query);
+    await input.press('Enter');
+    await page.waitForLoadState('networkidle');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: `Search failed: ${err}` };
+  }
+}
+
 export async function clear(page: Page, selector: string): Promise<ActionResult> {
   try {
     await page.fill(selector, '');
@@ -279,7 +314,7 @@ export interface BrowserAction {
     | 'check' | 'uncheck' | 'press_key' | 'scroll' | 'scroll_to' | 'wait' | 'wait_for'
     | 'extract_text' | 'extract_html' | 'get_title' | 'extract_links' | 'extract_images'
     | 'get_value' | 'get_attribute' | 'screenshot' | 'confirm_state'
-    | 'go_back' | 'go_forward' | 'refresh' | 'download';
+    | 'go_back' | 'go_forward' | 'refresh' | 'download' | 'search';
   selector?: string;
   value?: string;
   key?: string;
@@ -345,6 +380,8 @@ export async function executeAction(page: Page, action: BrowserAction): Promise<
       return refresh(page);
     case 'download':
       return { success: true, data: { message: 'Download action - configure download path separately' } };
+    case 'search':
+      return searchOnPage(page, action.value || '');
     default:
       return { success: false, error: `Unknown action type: ${action.type}` };
   }

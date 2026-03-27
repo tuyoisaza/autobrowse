@@ -1,6 +1,6 @@
 {
   "name": "autobrowse",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local Browser Agent - Desktop app with API for browser automation",
   "main": "dist-electron/main.mjs",
   "type": "module",

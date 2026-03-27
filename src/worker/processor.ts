@@ -77,7 +77,7 @@ export async function processTask(taskId: string): Promise<void> {
     
     updateTaskStatus(taskId, 'completed', JSON.stringify({ finalState }));
     logger.info('Task completed', { taskId });
-    
+
   } catch (err) {
     logger.error('Task failed', { taskId, err });
     
@@ -89,7 +89,5 @@ export async function processTask(taskId: string): Promise<void> {
     } else {
       updateTaskStatus(taskId, 'failed', undefined, String(err));
     }
-  } finally {
-    await browserManager.close();
   }
 }

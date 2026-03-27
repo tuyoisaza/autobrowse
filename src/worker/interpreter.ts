@@ -25,6 +25,10 @@ const ACTION_PATTERNS: ActionPattern[] = [
   // Auto-add https:// for bare domains
   { pattern: /^(?:go to |visit |open |)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/i, type: 'open_url', extract: 1, transform: (v) => v.startsWith('http') ? v : `https://${v}` },
   
+  // Search patterns
+  { pattern: /search (?:for )?"([^"]+)"/i, type: 'search', extract: 1 },
+  { pattern: /search (?:for )?(.+)/i, type: 'search', extract: 1 },
+  
   // Multi-action separator handling - split by semicolon first
   // Then individual actions:
   { pattern: /^(?:go to|visit|open|navigate to)\s+(.+)/i, type: 'open_url', extract: 1 },

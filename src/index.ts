@@ -13,11 +13,13 @@ import { recorder } from './recorder/manager.js';
 import { replayer } from './recorder/replayer.js';
 import { createProfileFromCurrent, loadProfile } from './profiles/store.js';
 import { isDebugMode, setDebugMode, getFeatureFlags, getFeatureFlag, setFeatureFlag } from './db/queries.js';
+import { browserManager } from './browser/manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let config: any = {};
+let currentSessionId: string | null = null;
 
 function getAppConfig() {
   if (Object.keys(config).length === 0) {
@@ -155,12 +157,16 @@ async function main() {
 
     logger.info('[Prompt] Creating task', { instruction });
     
+    if (!currentSessionId) {
+      currentSessionId = `session-${Date.now()}`;
+    }
+    
     const task = createTask({
       agent_id: getAgent().id,
       instruction,
       payload: null,
       priority: 1,
-      session_id: null,
+      session_id: currentSessionId,
       started_at: null,
       finished_at: null,
       result: null,
@@ -185,13 +191,13 @@ async function main() {
     logger.info('[Prompt] Task final status', { taskId: task.id, status: result?.status, attempts: result?.attempts });
     
     if (result?.status === 'completed') {
-      return { success: true, result: result.result, task_id: task.id, status: 'completed' };
+      return { status: 'OK' };
     } else if (result?.status === 'failed') {
-      return { success: false, error: result.error, task_id: task.id, status: 'failed', attempts: result.attempts };
+      return { status: 'FAILED', message: result.error };
     } else if (result?.status === 'running') {
-      return { success: false, error: 'Task timed out while running', task_id: task.id, status: 'timeout' };
+      return { status: 'FAILED', message: 'Task timed out while running' };
     }
-    return { success: false, error: 'Task still running or unknown error', task_id: task.id, status: result?.status };
+    return { status: 'FAILED', message: 'Task still running or unknown error' };
   });
   
   server.post('/tasks', async (request: any) => {
@@ -241,7 +247,18 @@ async function main() {
   });
   
   server.get('/sessions', async () => {
-    return [];
+    const active = browserManager.isInitialized();
+    return [{
+      id: currentSessionId || 'default',
+      active,
+      created_at: currentSessionId ? new Date().toISOString() : null
+    }];
+  });
+
+  server.post('/sessions/reset', async () => {
+    await browserManager.close();
+    currentSessionId = null;
+    return { status: 'OK', message: 'Browser session reset' };
   });
   
   server.get('/config', async () => {
@@ -388,6 +405,9 @@ function startWorkerLoop() {
         
         if (pendingTasks.length > 0) {
           for (const task of pendingTasks) {
+            if (!browserManager.isInitialized()) {
+              await browserManager.initialize(task.session_id || undefined);
+            }
             await processTask(task.id);
           }
         }
