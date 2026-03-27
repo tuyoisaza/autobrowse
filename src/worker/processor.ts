@@ -88,9 +88,10 @@ export async function processTask(taskId: string): Promise<void> {
       incrementTaskAttempts(taskId);
       updateTaskStatus(taskId, 'pending', undefined, String(err));
       logger.info('Task will retry', { taskId, attempt: task.attempts + 1 });
+      // Don't remove from queue - will be retried
     } else {
       updateTaskStatus(taskId, 'failed', undefined, String(err));
+      await removeFromQueue(taskId);
     }
-    await removeFromQueue(taskId);
   }
 }

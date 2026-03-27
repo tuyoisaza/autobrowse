@@ -185,8 +185,8 @@ async function main() {
     
     let result = getTask(task.id);
     let waitCount = 0;
-    while (result && result.status === 'running' && waitCount < 30) {
-      logger.info('[Prompt] Waiting for task', { taskId: task.id, status: result.status, waitCount });
+    while (result && (result.status === 'running' || result.status === 'pending') && waitCount < 60) {
+      logger.info('[Prompt] Waiting for task', { taskId: task.id, status: result.status, waitCount, attempts: result.attempts });
       await new Promise(r => setTimeout(r, 500));
       result = getTask(task.id);
       waitCount++;
