@@ -1,7 +1,8 @@
 export * from '../worker/types.js';
 export { GoalMapper, goalMapper } from '../worker/goal-mapper.js';
 export type { GoalHandler } from '../worker/goal-mapper.js';
-export { executeStep, executeSteps, ExecutionContext, StepProgress } from '../worker/step-executor.js';
+export { executeStep, executeSteps } from '../worker/step-executor.js';
+export type { ExecutionContext, StepProgress } from '../worker/step-executor.js';
 export { GoalExecutor, createGoalExecutor, goalExecutor, serializeExecutionResult, formatExecutionResult } from '../worker/orchestrator.js';
 export type { ExecutionOptions, ExecutionProgress } from '../worker/orchestrator.js';
 
