@@ -2,7 +2,7 @@ import type { Page } from 'playwright';
 import { GoalInput, ExecutionResult, GoalStatus, EvidenceData, StepResult, WorkflowStep } from './types.js';
 import { goalMapper as defaultGoalMapper, GoalMapper, GoalHandler } from './goal-mapper.js';
 import { executeSteps, ExecutionContext } from './step-executor.js';
-import type { BrowserManager } from '../browser/index.js';
+import type { BrowserManager, ScreenshotConfig } from '../browser/index.js';
 import type { AIGateway } from '../ai/gateway.js';
 import { createLogger } from '../logger/index.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,11 +14,42 @@ export interface ExecutionOptions {
   maxDuration?: number;
   screenshotOnEachStep?: boolean;
   screenshotOnFailure?: boolean;
+  screenshotConfig?: Partial<ScreenshotConfig>;
 }
 
 export interface ExecutionProgress {
   onStepComplete?: (step: WorkflowStep, result: StepResult) => void;
   onStepError?: (step: WorkflowStep, error: Error) => void;
+}
+
+function groupStepsForParallelExecution(steps: WorkflowStep[]): WorkflowStep[][] {
+  const groups: WorkflowStep[][] = [];
+  let currentGroup: WorkflowStep[] = [];
+  
+  for (const step of steps) {
+    const isParallelizable = step.type.startsWith('extract_') || 
+                            step.type === 'screenshot' ||
+                            step.type === 'wait';
+    
+    if (isParallelizable && currentGroup.length > 0) {
+      const prevType = currentGroup[currentGroup.length - 1].type;
+      if (prevType.startsWith('extract_') || prevType === 'screenshot' || prevType === 'wait') {
+        currentGroup.push(step);
+        continue;
+      }
+    }
+    
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+    currentGroup = [step];
+  }
+  
+  if (currentGroup.length > 0) {
+    groups.push(currentGroup);
+  }
+  
+  return groups;
 }
 
 export class GoalExecutor {
@@ -27,6 +58,20 @@ export class GoalExecutor {
   private aiGateway?: AIGateway;
   private isExecuting: boolean = false;
   private abortController?: AbortController;
+  private stepResultCache = new Map<string, { result: StepResult; timestamp: number }>();
+  private static readonly CACHE_TTL = 30000;
+
+  getCachedResult(stepKey: string): StepResult | null {
+    const cached = this.stepResultCache.get(stepKey);
+    if (cached && Date.now() - cached.timestamp < GoalExecutor.CACHE_TTL) {
+      return cached.result;
+    }
+    return null;
+  }
+
+  cacheResult(stepKey: string, result: StepResult): void {
+    this.stepResultCache.set(stepKey, { result, timestamp: Date.now() });
+  }
 
   constructor(browserManager: BrowserManager, aiGateway?: AIGateway, goalMapper?: GoalMapper) {
     this.browserManager = browserManager;
@@ -60,6 +105,14 @@ export class GoalExecutor {
     try {
       if (!this.browserManager.isInitialized()) {
         await this.browserManager.initialize(undefined, { mode: 'launch' });
+      }
+
+      if (options.screenshotConfig) {
+        this.browserManager.setScreenshotConfig(options.screenshotConfig);
+        logger.info('Screenshot config updated (options)', { config: options.screenshotConfig });
+      } else if (input.screenshotConfig) {
+        this.browserManager.setScreenshotConfig(input.screenshotConfig);
+        logger.info('Screenshot config updated (input)', { config: input.screenshotConfig });
       }
 
       page = this.browserManager.getPage();
@@ -97,7 +150,8 @@ export class GoalExecutor {
         steps,
         enhancedProgress,
         options.stopOnError ?? input.constraints?.stopOnError ?? true,
-        this.abortController.signal
+        this.abortController.signal,
+        this.browserManager.getScreenshotConfig()
       );
 
       if (options.screenshotOnFailure && context.stepResults.some(r => !r.success)) {

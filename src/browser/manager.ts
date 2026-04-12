@@ -1,4 +1,4 @@
-import { chromium, Browser, BrowserContext, BrowserType, Page, ChromiumBrowser } from 'playwright';
+import { chromium, Browser, BrowserContext, BrowserType, Page } from 'playwright';
 import { createLogger } from '../logger/index.js';
 import { getConfig as dbGetConfig } from '../db/queries.js';
 import * as path from 'path';
@@ -6,18 +6,124 @@ import * as fs from 'fs';
 
 const logger = createLogger('browser-manager');
 
-function getBrowserConfig() {
-  return {
-    headless: dbGetConfig('browser.headless') === 'true',
-    profilePath: dbGetConfig('browser.profilePath') || './profiles'
-  };
-}
-
 export type BrowserMode = 'launch' | 'cdp';
+export type ScreenshotMode = 'none' | 'base64' | 'file' | 'both';
+export type ScreenshotQuality = 'low' | 'medium' | 'high';
+
+export interface ScreenshotConfig {
+  mode: ScreenshotMode;
+  quality?: ScreenshotQuality;
+  outputDir?: string;
+  compress?: boolean;
+  maxSize?: number;
+}
 
 export interface BrowserManagerOptions {
   mode?: BrowserMode;
   cdpUrl?: string;
+  screenshots?: ScreenshotConfig;
+}
+
+function getBrowserConfig() {
+  return {
+    headless: dbGetConfig('browser.headless') === 'true',
+    profilePath: dbGetConfig('browser.profilePath') || './profiles',
+    screenshots: {
+      mode: (dbGetConfig('screenshots.mode') as ScreenshotMode) || 'base64',
+      quality: (dbGetConfig('screenshots.quality') as ScreenshotQuality) || 'medium',
+      outputDir: dbGetConfig('screenshots.outputDir') || './screenshots',
+      compress: dbGetConfig('screenshots.compress') !== 'false',
+      maxSize: parseInt(dbGetConfig('screenshots.maxSize') || '5000000', 10)
+    }
+  };
+}
+
+class SelectorCache {
+  private cache = new Map<string, { locator: any; timestamp: number }>();
+  private maxSize = 100;
+  private ttl = 60000;
+
+  get(pageId: string, selector: string): any | null {
+    const key = `${pageId}:${selector}`;
+    const entry = this.cache.get(key);
+    if (entry && Date.now() - entry.timestamp < this.ttl) {
+      return entry.locator;
+    }
+    return null;
+  }
+
+  set(pageId: string, selector: string, locator: any): void {
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) {
+        this.cache.delete(firstKey);
+      }
+    }
+    const key = `${pageId}:${selector}`;
+    this.cache.set(key, { locator, timestamp: Date.now() });
+  }
+
+  invalidate(pageId?: string): void {
+    if (pageId) {
+      for (const key of this.cache.keys()) {
+        if (key.startsWith(pageId + ':')) {
+          this.cache.delete(key);
+        }
+      }
+    } else {
+      this.cache.clear();
+    }
+  }
+}
+
+interface CDPConnection {
+  url: string;
+  inUse: boolean;
+  browser: any;
+}
+
+class CDPConnectionPool {
+  private connections: CDPConnection[] = [];
+  private maxSize = 5;
+  private waiting: Array<(conn: CDPConnection) => void> = [];
+
+  async acquire(url: string): Promise<CDPConnection> {
+    const available = this.connections.find(c => !c.inUse && c.url === url);
+    if (available) {
+      available.inUse = true;
+      return available;
+    }
+    
+    if (this.connections.length < this.maxSize) {
+      const conn: CDPConnection = {
+        url,
+        inUse: true,
+        browser: await chromium.connectOverCDP(url)
+      };
+      this.connections.push(conn);
+      return conn;
+    }
+    
+    return new Promise(resolve => {
+      this.waiting.push(resolve);
+    });
+  }
+
+  release(conn: CDPConnection): void {
+    conn.inUse = false;
+    const waiter = this.waiting.shift();
+    if (waiter) {
+      conn.inUse = true;
+      waiter(conn);
+    }
+  }
+
+  close(): void {
+    for (const conn of this.connections) {
+      conn.browser.disconnect?.();
+    }
+    this.connections = [];
+  }
 }
 
 export class BrowserManager {
@@ -27,10 +133,23 @@ export class BrowserManager {
   private currentSessionId: string | null = null;
   private mode: BrowserMode = 'launch';
   private cdpUrl: string | null = null;
+  private screenshotConfig: ScreenshotConfig = { mode: 'base64' };
+  private selectorCache = new SelectorCache();
+  private static connectionPool = new CDPConnectionPool();
+
+  getSelectorCache(): SelectorCache {
+    return this.selectorCache;
+  }
+
+  static getConnectionPool(): CDPConnectionPool {
+    return this.connectionPool;
+  }
 
   async initialize(sessionId?: string, options?: BrowserManagerOptions): Promise<void> {
+    const config = getBrowserConfig();
     this.mode = options?.mode || 'launch';
     this.cdpUrl = options?.cdpUrl || null;
+    this.screenshotConfig = options?.screenshots || config.screenshots;
 
     if (this.browser) {
       logger.info('Reusing existing browser instance');
@@ -49,7 +168,7 @@ export class BrowserManager {
     
     logger.info('Launching browser', { headless: config.headless });
     
-    const launchOptions: Parameters<BrowserType['launch']>[0] = {
+    const launchOptions = {
       headless: config.headless,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     };
@@ -58,7 +177,7 @@ export class BrowserManager {
       this.browser = await chromium.launch(launchOptions);
     } catch (headlessError) {
       logger.warn('Headless launch failed, trying with different args', { error: headlessError });
-      this.browser = await chromium.launch({ ...launchOptions, channel: 'chromium' });
+      this.browser = await chromium.launch({ ...launchOptions, channel: 'chromium' as const });
     }
     
     const contextOptions: any = {};
@@ -170,6 +289,64 @@ export class BrowserManager {
 
   isExternalBrowser(): boolean {
     return this.mode === 'cdp';
+  }
+
+  getScreenshotConfig(): ScreenshotConfig {
+    return { ...this.screenshotConfig };
+  }
+
+  setScreenshotConfig(config: Partial<ScreenshotConfig>): void {
+    this.screenshotConfig = { ...this.screenshotConfig, ...config };
+  }
+
+  async captureScreenshot(
+    page: Page,
+    options: { fullPage?: boolean; element?: string; name?: string } = {}
+  ): Promise<{ path?: string; base64?: string }> {
+    const config = this.screenshotConfig;
+    
+    if (config.mode === 'none') {
+      return {};
+    }
+
+    const result: { path?: string; base64?: string } = {};
+    const name = options.name || `screenshot_${Date.now()}`;
+
+    if (config.outputDir && (config.mode === 'file' || config.mode === 'both')) {
+      const outputDir = path.resolve(config.outputDir);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+    }
+
+    const qualityMap = { low: 30, medium: 50, high: 80 };
+    const quality = qualityMap[config.quality || 'medium'];
+
+    if (config.mode === 'file' || config.mode === 'both') {
+      const filename = `${name}.png`;
+      const filepath = path.join(config.outputDir || './screenshots', filename);
+      await page.screenshot({ 
+        path: filepath, 
+        fullPage: options.fullPage ?? false,
+        ...(options.element ? {} : {}) 
+      });
+      result.path = filepath;
+    }
+
+    if (config.mode === 'base64' || config.mode === 'both') {
+      const buffer = await page.screenshot({ 
+        fullPage: options.fullPage ?? false,
+        type: 'png'
+      });
+      
+      if (config.compress && config.mode === 'base64') {
+        result.base64 = buffer.toString('base64');
+      } else {
+        result.base64 = buffer.toString('base64');
+      }
+    }
+
+    return result;
   }
 }
 
