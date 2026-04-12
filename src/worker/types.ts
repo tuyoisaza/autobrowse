@@ -13,6 +13,13 @@ export interface GoalInput {
     expectedSelector?: string;
     extractedData?: string[];
   };
+  screenshotConfig?: {
+    mode?: 'none' | 'base64' | 'file' | 'both';
+    quality?: 'low' | 'medium' | 'high';
+    outputDir?: string;
+    compress?: boolean;
+    maxSize?: number;
+  };
 }
 
 export interface WorkflowStep {
@@ -64,6 +71,11 @@ export type StepType =
   | 'submit'
   | 'get_value'
   | 'evaluate'
+  | 'upload'
+  | 'wait_for_network'
+  | 'switch_frame'
+  | 'switch_frame_back'
+  | 'set_handle_dialog'
   | 'unknown';
 
 export interface RetryConfig {

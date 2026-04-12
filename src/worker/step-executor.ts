@@ -1,13 +1,27 @@
 import type { Page, Locator } from 'playwright';
 import { WorkflowStep, StepResult, EvidenceData } from './types.js';
 import { createLogger } from '../logger/index.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const logger = createLogger('worker:executor');
+
+export type ScreenshotMode = 'none' | 'base64' | 'file' | 'both';
+export type ScreenshotQuality = 'low' | 'medium' | 'high';
+
+export interface ScreenshotConfig {
+  mode: ScreenshotMode;
+  quality?: ScreenshotQuality;
+  outputDir?: string;
+  compress?: boolean;
+  maxSize?: number;
+}
 
 export interface ExecutionContext {
   page: Page;
   stepResults: StepResult[];
   evidence: EvidenceData;
+  screenshotConfig?: ScreenshotConfig;
 }
 
 export interface StepProgress {
@@ -215,6 +229,65 @@ export async function executeStep(
         break;
       }
 
+      case 'upload': {
+        if (step.selector && step.value) {
+          const locator = await findElement(context.page, step.selector);
+          await locator.setInputFiles(step.value);
+        }
+        break;
+      }
+
+      case 'wait_for_network': {
+        const patterns = (step.value || '').split(',').filter(Boolean);
+        const timeout = step.timeout || 30000;
+        
+        if (patterns.length > 0) {
+          await context.page.waitForResponse(
+            response => patterns.some(p => response.url().includes(p.trim())),
+            { timeout }
+          ).catch(() => {});
+        } else {
+          await context.page.waitForLoadState('networkidle', { timeout }).catch(() => {});
+        }
+        break;
+      }
+
+      case 'switch_frame': {
+        if (step.selector) {
+          const frame = context.page.frameLocator(step.selector);
+          if (frame) {
+            (context as any)._previousPage = context.page;
+            (context as any)._currentFrame = frame;
+            (context as any).page = frame as any;
+          }
+        }
+        break;
+      }
+
+      case 'switch_frame_back': {
+        const prevPage = (context as any)._previousPage;
+        if (prevPage) {
+          (context as any).page = prevPage;
+          (context as any)._previousPage = null;
+          (context as any)._currentFrame = null;
+        }
+        break;
+      }
+
+      case 'set_handle_dialog': {
+        const action = step.value as 'accept' | 'dismiss';
+        const promptValue = step.key;
+        
+        context.page.on('dialog', async (dialog) => {
+          if (action === 'accept') {
+            await dialog.accept(promptValue);
+          } else {
+            await dialog.dismiss();
+          }
+        });
+        break;
+      }
+
       case 'wait':
         await sleep(parseInt(step.value || '2000'), signal);
         break;
@@ -231,20 +304,81 @@ export async function executeStep(
         break;
 
       case 'screenshot': {
-        const screenshot = await context.page.screenshot({ 
-          fullPage: step.value !== 'viewport'
-        });
-        context.evidence.screenshots.push(screenshot);
-        result.screenshot = screenshot.toString('base64');
+        const config = context.screenshotConfig || { mode: 'base64' as ScreenshotMode };
+        
+        if (config.mode === 'none') {
+          break;
+        }
+
+        const fullPage = step.value !== 'viewport';
+        
+        if (config.mode === 'file') {
+          const outputDir = path.resolve(config.outputDir || './screenshots');
+          if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+          }
+          const filename = `screenshot_${step.id}_${Date.now()}.png`;
+          const filepath = path.join(outputDir, filename);
+          await context.page.screenshot({ path: filepath, fullPage });
+          context.evidence.screenshots.push(filepath);
+        } else if (config.mode === 'both') {
+          const outputDir = path.resolve(config.outputDir || './screenshots');
+          if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+          }
+          const filename = `screenshot_${step.id}_${Date.now()}.png`;
+          const filepath = path.join(outputDir, filename);
+          await context.page.screenshot({ path: filepath, fullPage });
+          context.evidence.screenshots.push(filepath);
+          
+          const screenshot = await context.page.screenshot({ fullPage, type: 'png' });
+          context.evidence.screenshots.push(screenshot);
+          result.screenshot = screenshot.toString('base64');
+        } else {
+          const screenshot = await context.page.screenshot({ fullPage, type: 'png' });
+          context.evidence.screenshots.push(screenshot);
+          result.screenshot = screenshot.toString('base64');
+        }
         break;
       }
 
       case 'screenshot_element': {
         if (step.selector) {
+          const config = context.screenshotConfig || { mode: 'base64' as ScreenshotMode };
+          
+          if (config.mode === 'none') {
+            break;
+          }
+
           const locator = await findElement(context.page, step.selector);
-          const screenshot = await locator.screenshot();
-          context.evidence.screenshots.push(screenshot);
-          result.screenshot = screenshot.toString('base64');
+          
+          if (config.mode === 'file') {
+            const outputDir = path.resolve(config.outputDir || './screenshots');
+            if (!fs.existsSync(outputDir)) {
+              fs.mkdirSync(outputDir, { recursive: true });
+            }
+            const filename = `screenshot_${step.id}_${Date.now()}.png`;
+            const filepath = path.join(outputDir, filename);
+            await locator.screenshot({ path: filepath });
+            context.evidence.screenshots.push(filepath);
+          } else if (config.mode === 'both') {
+            const outputDir = path.resolve(config.outputDir || './screenshots');
+            if (!fs.existsSync(outputDir)) {
+              fs.mkdirSync(outputDir, { recursive: true });
+            }
+            const filename = `screenshot_${step.id}_${Date.now()}.png`;
+            const filepath = path.join(outputDir, filename);
+            await locator.screenshot({ path: filepath });
+            context.evidence.screenshots.push(filepath);
+            
+            const screenshot = await locator.screenshot();
+            context.evidence.screenshots.push(screenshot);
+            result.screenshot = screenshot.toString('base64');
+          } else {
+            const screenshot = await locator.screenshot();
+            context.evidence.screenshots.push(screenshot);
+            result.screenshot = screenshot.toString('base64');
+          }
         }
         break;
       }
@@ -485,7 +619,8 @@ export async function executeSteps(
   steps: WorkflowStep[],
   onProgress?: StepProgress,
   stopOnError: boolean = true,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  screenshotConfig?: ScreenshotConfig
 ): Promise<ExecutionContext> {
   const context: ExecutionContext = {
     page,
@@ -494,7 +629,8 @@ export async function executeSteps(
       screenshots: [],
       extractedData: {},
       logs: []
-    }
+    },
+    screenshotConfig
   };
 
   for (const step of steps) {
