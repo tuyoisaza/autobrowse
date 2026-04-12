@@ -7,7 +7,13 @@ export { GoalExecutor, createGoalExecutor, goalExecutor, serializeExecutionResul
 export type { ExecutionOptions, ExecutionProgress } from '../worker/orchestrator.js';
 
 export { BrowserManager, browserManager } from '../browser/manager.js';
-export type { BrowserMode, BrowserManagerOptions } from '../browser/manager.js';
+export type { 
+  BrowserMode, 
+  BrowserManagerOptions,
+  ScreenshotMode,
+  ScreenshotQuality,
+  ScreenshotConfig 
+} from '../browser/manager.js';
 
 export * from '../browser/actions.js';
 export type { BrowserAction, ActionResult } from '../browser/actions.js';

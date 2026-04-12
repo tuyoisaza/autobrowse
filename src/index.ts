@@ -398,6 +398,11 @@ async function main() {
         await browserManager.initialize();
       }
 
+      if (goalInput.screenshotConfig) {
+        browserManager.setScreenshotConfig(goalInput.screenshotConfig);
+        logger.info('[ExecuteGoal] Screenshot config set', { config: goalInput.screenshotConfig });
+      }
+
       const executor = new GoalExecutor(browserManager, aiGateway);
       const result = await executor.execute(goalInput);
 
