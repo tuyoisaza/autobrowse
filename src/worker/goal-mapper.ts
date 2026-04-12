@@ -22,7 +22,11 @@ export class GoalMapper {
       this.createWorkflowHandler(),
       this.createScrapePageHandler(),
       this.createDownloadHandler(),
-      this.createTakeScreenshotHandler()
+      this.createTakeScreenshotHandler(),
+      this.createUploadFileHandler(),
+      this.createWaitForNetworkHandler(),
+      this.createSwitchFrameHandler(),
+      this.createHandleDialogHandler()
     ];
 
     for (const handler of this.defaultHandlers) {
@@ -732,6 +736,217 @@ export class GoalMapper {
       validateResult: (results, evidence) => {
         const screenshotResult = results.find(r => r.type === 'screenshot' || r.type === 'screenshot_element');
         return screenshotResult?.success && evidence.screenshots.length > 0 ? 'achieved' : 'failed';
+      }
+    };
+  }
+
+  private createUploadFileHandler(): GoalHandler {
+    return {
+      goal: 'upload_file',
+      description: 'Upload a file to a page',
+      mapToSteps: (inputs) => {
+        const steps: WorkflowStep[] = [];
+        
+        if (inputs.url) {
+          steps.push({
+            id: `step-${Date.now()}-nav`,
+            type: 'navigate',
+            description: 'Navigate to upload page',
+            action: 'navigate',
+            value: inputs.url,
+            timeout: 30000
+          });
+        }
+
+        if (inputs.waitForSelector) {
+          steps.push({
+            id: `step-${Date.now()}-wait`,
+            type: 'wait_for',
+            description: 'Wait for upload input',
+            action: 'wait_for',
+            selector: inputs.waitForSelector,
+            timeout: 15000
+          });
+        }
+
+        steps.push({
+          id: `step-${Date.now()}-upload`,
+          type: 'upload',
+          description: `Upload file`,
+          action: 'upload',
+          selector: inputs.selector,
+          value: inputs.filePath,
+          timeout: 30000
+        });
+
+        if (inputs.submit !== false) {
+          steps.push({
+            id: `step-${Date.now()}-submit`,
+            type: 'submit',
+            description: 'Submit upload',
+            action: 'submit',
+            timeout: 15000
+          });
+        }
+
+        if (inputs.waitForNavigation) {
+          steps.push({
+            id: `step-${Date.now()}-wait-nav`,
+            type: 'wait_for_navigation',
+            description: 'Wait for upload to complete',
+            action: 'wait_for_navigation',
+            value: inputs.waitForNavigation,
+            timeout: inputs.navigationTimeout || 30000
+          });
+        }
+
+        return steps;
+      },
+      validateResult: (results, evidence): GoalStatus => {
+        const uploadResult = results.find(r => r.type === 'upload');
+        return uploadResult?.success ? 'achieved' : 'failed';
+      }
+    };
+  }
+
+  private createWaitForNetworkHandler(): GoalHandler {
+    return {
+      goal: 'wait_for_network',
+      description: 'Wait for network requests to complete',
+      mapToSteps: (inputs) => {
+        const steps: WorkflowStep[] = [];
+
+        steps.push({
+          id: `step-${Date.now()}-wait-network`,
+          type: 'wait_for_network',
+          description: 'Wait for network requests',
+          action: 'wait_for_network',
+          value: Array.isArray(inputs.waitFor) ? inputs.waitFor.join(',') : inputs.waitFor,
+          timeout: inputs.timeout || 30000
+        });
+
+        return steps;
+      },
+      validateResult: (results, evidence): GoalStatus => {
+        const waitResult = results.find(r => r.type === 'wait_for_network');
+        return waitResult?.success !== false ? 'achieved' : 'uncertain';
+      }
+    };
+  }
+
+  private createSwitchFrameHandler(): GoalHandler {
+    return {
+      goal: 'switch_frame',
+      description: 'Interact with iframe content',
+      mapToSteps: (inputs) => {
+        const steps: WorkflowStep[] = [];
+
+        if (inputs.url) {
+          steps.push({
+            id: `step-${Date.now()}-nav`,
+            type: 'navigate',
+            description: 'Navigate to page with frame',
+            action: 'navigate',
+            value: inputs.url,
+            timeout: 30000
+          });
+        }
+
+        if (inputs.waitForSelector) {
+          steps.push({
+            id: `step-${Date.now()}-wait`,
+            type: 'wait_for',
+            description: 'Wait for frame',
+            action: 'wait_for',
+            selector: inputs.waitForSelector,
+            timeout: inputs.waitTimeout || 15000
+          });
+        }
+
+        steps.push({
+          id: `step-${Date.now()}-switch-frame`,
+          type: 'switch_frame',
+          description: 'Switch to frame',
+          action: 'switch_frame',
+          selector: inputs.frameSelector,
+          timeout: 15000
+        });
+
+        if (inputs.actions && Array.isArray(inputs.actions)) {
+          for (const action of inputs.actions) {
+            const actionId = action.id || `step-${Date.now()}-frame-action`;
+            const { id: _ignored, ...rest } = action;
+            steps.push({
+              id: actionId,
+              ...rest
+            });
+          }
+        }
+
+        if (inputs.switchBack !== false) {
+          steps.push({
+            id: `step-${Date.now()}-switch-back`,
+            type: 'switch_frame_back',
+            description: 'Return to main frame',
+            action: 'switch_frame_back',
+            timeout: 5000
+          });
+        }
+
+        return steps;
+      },
+      validateResult: (results, evidence): GoalStatus => {
+        const switchResult = results.find(r => r.type === 'switch_frame');
+        return switchResult?.success ? 'achieved' : 'failed';
+      }
+    };
+  }
+
+  private createHandleDialogHandler(): GoalHandler {
+    return {
+      goal: 'handle_dialog',
+      description: 'Handle browser dialogs',
+      mapToSteps: (inputs) => {
+        const steps: WorkflowStep[] = [];
+
+        steps.push({
+          id: `step-${Date.now()}-set-dialog`,
+          type: 'set_handle_dialog',
+          description: `Set dialog handler to ${inputs.action}`,
+          action: 'set_handle_dialog',
+          value: inputs.action,
+          key: inputs.promptValue
+        });
+
+        if (inputs.clickSelector) {
+          steps.push({
+            id: `step-${Date.now()}-click-trigger`,
+            type: 'click',
+            description: 'Click to trigger dialog',
+            action: 'click',
+            selector: inputs.clickSelector,
+            timeout: inputs.timeout || 15000
+          });
+        }
+
+        if (inputs.screenshot) {
+          steps.push({
+            id: `step-${Date.now()}-screenshot`,
+            type: 'screenshot',
+            description: 'Take screenshot after dialog',
+            action: 'screenshot',
+            optional: true
+          });
+        }
+
+        return steps;
+      },
+      validateResult: (results, evidence): GoalStatus => {
+        const dialogResult = results.find(r => r.type === 'set_handle_dialog');
+        const clickResult = results.find(r => r.type === 'click');
+        
+        if (!clickResult) return 'achieved';
+        return clickResult.success ? 'achieved' : 'failed';
       }
     };
   }
