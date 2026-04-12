@@ -14,6 +14,7 @@ import { replayer } from './recorder/replayer.js';
 import { createProfileFromCurrent, loadProfile } from './profiles/store.js';
 import { isDebugMode, setDebugMode, getFeatureFlags, getFeatureFlag, setFeatureFlag } from './db/queries.js';
 import { browserManager } from './browser/manager.js';
+import { GoalInput, GoalExecutor } from './worker/worker.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -130,7 +131,7 @@ async function main() {
     }
     if (flags) {
       for (const [name, enabled] of Object.entries(flags)) {
-        setFeatureFlag(name, enabled);
+        setFeatureFlag(name, Boolean(enabled));
       }
     }
     return { success: true };
@@ -381,6 +382,39 @@ async function main() {
   server.delete('/profiles/:id', async (request: any) => {
     deleteProfile(request.params.id);
     return { success: true };
+  });
+
+  server.post<{ Body: GoalInput }>('/execute-goal', async (request, reply) => {
+    const goalInput = request.body as GoalInput;
+    
+    if (!goalInput.goal) {
+      return reply.status(400).send({ error: 'goal is required' });
+    }
+
+    logger.info('[ExecuteGoal] Starting execution', { goal: goalInput.goal });
+
+    try {
+      if (!browserManager.isInitialized()) {
+        await browserManager.initialize();
+      }
+
+      const executor = new GoalExecutor(browserManager, aiGateway);
+      const result = await executor.execute(goalInput);
+
+      logger.info('[ExecuteGoal] Completed', { 
+        goal: goalInput.goal, 
+        status: result.status,
+        goalStatus: result.goalStatus 
+      });
+
+      return result;
+    } catch (err) {
+      logger.error('[ExecuteGoal] Failed', { error: err });
+      return reply.status(500).send({ 
+        error: 'Execution failed',
+        message: err instanceof Error ? err.message : String(err)
+      });
+    }
   });
   
   try {

@@ -1,4 +1,4 @@
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { chromium, Browser, BrowserContext, BrowserType, Page, ChromiumBrowser } from 'playwright';
 import { createLogger } from '../logger/index.js';
 import { getConfig as dbGetConfig } from '../db/queries.js';
 import * as path from 'path';
@@ -13,23 +13,43 @@ function getBrowserConfig() {
   };
 }
 
-class BrowserManager {
+export type BrowserMode = 'launch' | 'cdp';
+
+export interface BrowserManagerOptions {
+  mode?: BrowserMode;
+  cdpUrl?: string;
+}
+
+export class BrowserManager {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private currentSessionId: string | null = null;
-  
-  async initialize(sessionId?: string): Promise<void> {
-    const config = getBrowserConfig();
-    
+  private mode: BrowserMode = 'launch';
+  private cdpUrl: string | null = null;
+
+  async initialize(sessionId?: string, options?: BrowserManagerOptions): Promise<void> {
+    this.mode = options?.mode || 'launch';
+    this.cdpUrl = options?.cdpUrl || null;
+
     if (this.browser) {
       logger.info('Reusing existing browser instance');
       return;
     }
+
+    if (this.mode === 'cdp') {
+      await this.initializeViaCDP();
+    } else {
+      await this.initializeViaLaunch(sessionId);
+    }
+  }
+
+  private async initializeViaLaunch(sessionId?: string): Promise<void> {
+    const config = getBrowserConfig();
     
     logger.info('Launching browser', { headless: config.headless });
     
-    const launchOptions: any = {
+    const launchOptions: Parameters<BrowserType['launch']>[0] = {
       headless: config.headless,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     };
@@ -37,8 +57,8 @@ class BrowserManager {
     try {
       this.browser = await chromium.launch(launchOptions);
     } catch (headlessError) {
-      logger.warn('Headless launch failed, trying headless shell', { error: headlessError });
-      this.browser = await chromium.launchHeadless(launchOptions);
+      logger.warn('Headless launch failed, trying with different args', { error: headlessError });
+      this.browser = await chromium.launch({ ...launchOptions, channel: 'chromium' });
     }
     
     const contextOptions: any = {};
@@ -54,37 +74,82 @@ class BrowserManager {
     this.page = await this.context.newPage();
     this.currentSessionId = sessionId || 'default';
     
-    logger.info('Browser initialized', { sessionId: this.currentSessionId });
+    logger.info('Browser initialized via launch', { sessionId: this.currentSessionId });
   }
-  
+
+  private async initializeViaCDP(): Promise<void> {
+    if (!this.cdpUrl) {
+      throw new Error('CDP URL required when mode is "cdp". Provide cdpUrl in options.');
+    }
+    
+    logger.info('Connecting to browser via CDP', { cdpUrl: this.cdpUrl });
+    
+    try {
+      this.browser = await chromium.connectOverCDP(this.cdpUrl);
+      
+      const contexts = this.browser.contexts();
+      if (contexts.length > 0) {
+        this.context = contexts[0];
+      } else {
+        this.context = await this.browser.newContext();
+      }
+      
+      const pages = this.context.pages();
+      this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+      
+      this.currentSessionId = 'cdp-session';
+      logger.info('Browser connected via CDP', { sessionId: this.currentSessionId });
+    } catch (err) {
+      logger.error('Failed to connect via CDP', { error: err, cdpUrl: this.cdpUrl });
+      throw err;
+    }
+  }
+
+  async connectToElectron(debuggerUrl: string): Promise<void> {
+    logger.info('Connecting to Electron Chromium via CDP', { debuggerUrl });
+    await this.initialize(undefined, { mode: 'cdp', cdpUrl: debuggerUrl });
+  }
+
   async close(): Promise<void> {
     if (this.page) {
-      await this.page.close();
+      await this.page.close().catch(() => {});
       this.page = null;
     }
     if (this.context) {
-      await this.context.close();
+      await this.context.close().catch(() => {});
       this.context = null;
     }
     if (this.browser) {
-      await this.browser.close();
+      if (this.mode === 'cdp') {
+        await (this.browser as any).disconnect?.().catch(() => {});
+      } else {
+        await this.browser.close().catch(() => {});
+      }
       this.browser = null;
     }
     this.currentSessionId = null;
     logger.info('Browser closed');
   }
-  
+
   getPage(): Page {
     if (!this.page) {
       throw new Error('Browser not initialized. Call initialize() first.');
     }
     return this.page;
   }
-  
+
+  getBrowser(): Browser | null {
+    return this.browser;
+  }
+
   getSessionId(): string | null {
     return this.currentSessionId;
   }
-  
+
+  getMode(): BrowserMode {
+    return this.mode;
+  }
+
   async saveProfile(sessionId: string): Promise<void> {
     const config = getBrowserConfig();
     const profilePath = path.join(config.profilePath, sessionId);
@@ -98,13 +163,18 @@ class BrowserManager {
       logger.info('Profile saved', { profilePath });
     }
   }
-  
+
   isInitialized(): boolean {
-    return this.browser !== null;
+    return this.browser !== null && this.page !== null;
+  }
+
+  isExternalBrowser(): boolean {
+    return this.mode === 'cdp';
   }
 }
 
 export const browserManager = new BrowserManager();
+
 export async function exportBrowserState(page: Page): Promise<{
   cookies: any[];
   localStorage: Record<string, string>;
@@ -113,17 +183,19 @@ export async function exportBrowserState(page: Page): Promise<{
   const cookies = await page.context().cookies();
   const localStorage = await page.evaluate(() => {
     const result: Record<string, string> = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key) result[key] = localStorage.getItem(key) || '';
+    const ls = window.localStorage;
+    for (let i = 0; i < ls.length; i++) {
+      const key = ls.key(i);
+      if (key) result[key] = ls.getItem(key) || '';
     }
     return result;
   });
   const sessionStorage = await page.evaluate(() => {
     const result: Record<string, string> = {};
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (key) result[key] = sessionStorage.getItem(key) || '';
+    const ss = window.sessionStorage;
+    for (let i = 0; i < ss.length; i++) {
+      const key = ss.key(i);
+      if (key) result[key] = ss.getItem(key) || '';
     }
     return result;
   });
